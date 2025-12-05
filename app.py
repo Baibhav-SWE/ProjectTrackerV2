@@ -65,22 +65,22 @@ else:
 
 # Helper function to get collections
 def get_users_collection():
-    return mongo_db['users'] if mongo_db else None
+    return mongo_db['users'] if mongo_db is not None else None
 
 def get_samples_collection():
-    return mongo_db['samples'] if mongo_db else None
+    return mongo_db['samples'] if mongo_db is not None else None
 
 def get_experiments_collection():
-    return mongo_db['experiments'] if mongo_db else None
+    return mongo_db['experiments'] if mongo_db is not None else None
 
 def get_prefixes_collection():
-    return mongo_db['prefixes'] if mongo_db else None
+    return mongo_db['prefixes'] if mongo_db is not None else None
 
 def get_trash_collection():
-    return mongo_db['trash'] if mongo_db else None
+    return mongo_db['trash'] if mongo_db is not None else None
 
 def get_plots_collection():
-    return mongo_db['plots'] if mongo_db else None
+    return mongo_db['plots'] if mongo_db is not None else None
 
 # Admin required decorator
 def admin_required(f):
