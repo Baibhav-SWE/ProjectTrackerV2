@@ -28,7 +28,7 @@ openai_client = None
 if openai_api_key:
     from openai import OpenAI
     openai_client = OpenAI(api_key=openai_api_key)
-        else:
+else:
     print("Warning: OpenAI API key not found. LLM chatbot feature will be disabled.")
 
 app = Flask(__name__)
