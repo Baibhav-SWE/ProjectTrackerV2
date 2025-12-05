@@ -28,7 +28,7 @@ openai_client = None
 if openai_api_key:
     from openai import OpenAI
     openai_client = OpenAI(api_key=openai_api_key)
-else:
+        else:
     print("Warning: OpenAI API key not found. LLM chatbot feature will be disabled.")
 
 app = Flask(__name__)
@@ -227,7 +227,7 @@ def index():
 @login_required
 def add_sample():
     prefixes = get_prefixes_collection()
-    all_prefixes = list(prefixes.find().sort('full_form', 1)) if prefixes else []
+    all_prefixes = list(prefixes.find().sort('full_form', 1)) if prefixes is not None else []
 
     if request.method == 'POST':
         samples = get_samples_collection()
@@ -293,7 +293,7 @@ def add_sample():
 
         # Create experiment if any experiment data is provided
         experiments = get_experiments_collection()
-        if experiments and any(request.form.get(field) for field in ['transmittance', 'reflectance', 'absorbance', 'plqy', 'sem', 'edx', 'xrd']):
+        if experiments is not None and any(request.form.get(field) for field in ['transmittance', 'reflectance', 'absorbance', 'plqy', 'sem', 'edx', 'xrd']):
             experiment = {
                 'sample_id': full_sample_id,
                 'transmittance': request.form.get('transmittance'),
@@ -326,7 +326,7 @@ def edit_sample(id):
         flash('Sample not found', 'error')
         return redirect(url_for('index'))
     
-    all_prefixes = list(prefixes.find().sort('full_form', 1)) if prefixes else []
+    all_prefixes = list(prefixes.find().sort('full_form', 1)) if prefixes is not None else []
 
     if request.method == 'POST':
         # Handle image upload
@@ -395,10 +395,10 @@ def delete_sample(id):
             flash('Sample not found', 'error')
             return redirect(url_for('index'))
         
-        experiment = experiments.find_one({'sample_id': id}) if experiments else None
+        experiment = experiments.find_one({'sample_id': id}) if experiments is not None else None
         
         # Move to trash
-        if trash:
+        if trash is not None:
             trash_record = {
                 'sample': sample,
                 'experiment': experiment,
@@ -409,9 +409,9 @@ def delete_sample(id):
         
         # Delete from main collections
         samples.delete_one({'id': id})
-        if experiments:
+        if experiments is not None:
             experiments.delete_one({'sample_id': id})
-        if plots:
+        if plots is not None:
             plots.delete_many({'sample_id': id})
         
         flash('Record moved to trash successfully!', 'success')
@@ -480,7 +480,7 @@ def add_experiment(sample_id):
             'created_at': datetime.utcnow()
         }
         
-        if experiments:
+        if experiments is not None:
             experiments.insert_one(experiment)
         
         flash('Experiment added successfully!', 'success')
@@ -530,7 +530,7 @@ def combined_view():
     
     results = []
     for sample in all_samples:
-        experiment = experiments.find_one({'sample_id': sample['id']}) if experiments else None
+        experiment = experiments.find_one({'sample_id': sample['id']}) if experiments is not None else None
         results.append((sample, experiment))
     
     # Sort by company name and sequence number
@@ -575,12 +575,12 @@ def prefix_table():
 @login_required
 def delete_prefix(prefix):
     prefixes = get_prefixes_collection()
-    if prefixes:
-        try:
+    if prefixes is not None:
+    try:
             prefixes.delete_one({'prefix': prefix})
-            flash('Prefix deleted successfully!', 'success')
-        except Exception as e:
-            flash('Error deleting prefix!', 'error')
+        flash('Prefix deleted successfully!', 'success')
+    except Exception as e:
+        flash('Error deleting prefix!', 'error')
     return redirect(url_for('prefix_table'))
 
 @app.route('/register', methods=['POST'])
@@ -805,18 +805,18 @@ def plots():
         sharepoint_link = request.form.get('sharepoint_link')
         
         if sample_id and sharepoint_link:
-            if samples and not samples.find_one({'id': sample_id}):
+            if samples is not None and not samples.find_one({'id': sample_id}):
                 flash('Sample ID not found! Please enter a valid sample ID.', 'error')
-            elif plots_col and plots_col.find_one({'sample_id': sample_id}):
-                flash('A plot entry already exists for this sample ID!', 'error')
-            elif plots_col:
+            elif plots_col is not None and plots_col.find_one({'sample_id': sample_id}):
+                    flash('A plot entry already exists for this sample ID!', 'error')
+            elif plots_col is not None:
                 plots_col.insert_one({
                     'sample_id': sample_id,
                     'sharepoint_link': sharepoint_link,
                     'created_at': datetime.utcnow(),
                     'created_by': session.get('username')
                 })
-                flash('Plot entry added successfully!', 'success')
+                    flash('Plot entry added successfully!', 'success')
         else:
             flash('Both Sample ID and SharePoint Link are required!', 'error')
     
@@ -831,17 +831,17 @@ def plots():
         'xrd': []
     }
     
-    if samples and experiments:
+    if samples is not None and experiments is not None:
         all_samples = {s['id']: s for s in samples.find()}
         for exp in experiments.find():
             sample = all_samples.get(exp.get('sample_id'))
             if sample:
-                for measurement_type in plot_data.keys():
+        for measurement_type in plot_data.keys():
                     data = exp.get(measurement_type)
                     if data:
                         plot_data[measurement_type].append({
                             'id': sample['id'],
-                            'data': data,
+                        'data': data,
                             'recipe_front': sample.get('recipe_front'),
                             'recipe_back': sample.get('recipe_back'),
                             'glass_type': sample.get('glass_type')
@@ -849,7 +849,7 @@ def plots():
     
     # Get plots entries
     plots_entries = []
-    if plots_col and samples:
+    if plots_col is not None and samples is not None:
         for plot in plots_col.find().sort('created_at', -1):
             sample = samples.find_one({'id': plot.get('sample_id')})
             plots_entries.append((plot, sample))
@@ -860,12 +860,12 @@ def plots():
 @login_required
 def delete_plot(plot_id):
     plots_col = get_plots_collection()
-    if plots_col:
-        try:
+    if plots_col is not None:
+    try:
             plots_col.delete_one({'_id': ObjectId(plot_id)})
-            flash('Plot entry deleted successfully!', 'success')
-        except Exception as e:
-            flash('Error deleting plot entry!', 'error')
+        flash('Plot entry deleted successfully!', 'success')
+    except Exception as e:
+        flash('Error deleting plot entry!', 'error')
     return redirect(url_for('plots'))
 
 @app.route('/reset_admin', methods=['GET'])
@@ -876,13 +876,13 @@ def reset_admin():
     
     try:
         admin = users.find_one({'username': 'admin'})
-        if admin:
+            if admin:
             users.update_one(
                 {'_id': admin['_id']},
                 {'$set': {'password': generate_password_hash('admin123', method='pbkdf2:sha256')}}
             )
-            return 'Admin password reset successfully to "admin123"'
-        else:
+                return 'Admin password reset successfully to "admin123"'
+            else:
             users.insert_one({
                 'username': 'admin',
                 'email': 'admin@example.com',
@@ -891,7 +891,7 @@ def reset_admin():
                 'is_active': True,
                 'created_at': datetime.utcnow()
             })
-            return 'New admin user created with password "admin123"'
+                return 'New admin user created with password "admin123"'
     except Exception as e:
         return f'Error: {str(e)}'
 
@@ -903,7 +903,7 @@ def admin_users():
     users = get_users_collection()
     if users is None:
         return render_template('admin/users.html', users=[])
-    
+
     all_users = list(users.find())
     return render_template('admin/users.html', users=all_users)
 
@@ -965,8 +965,8 @@ def delete_user(user_id):
     user = users.find_one({'_id': ObjectId(user_id)})
     if not user:
         flash('User not found', 'error')
-        return redirect(url_for('admin_users'))
-    
+    return redirect(url_for('admin_users'))
+
     if str(user['_id']) == session['user_id']:
         flash('You cannot delete your own account', 'error')
         return redirect(url_for('admin_users'))
@@ -1019,8 +1019,8 @@ def compare():
             show_selection=True,
             error=False
         )
-            
-    except Exception as e:
+                
+        except Exception as e:
         print(f"Unexpected error in compare route: {str(e)}")
         flash(f"An unexpected error occurred: {str(e)}", 'error')
         return render_template('compare.html', error=True)
