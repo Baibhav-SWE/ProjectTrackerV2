@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}Project Tracker{% endblock %}
+
+{% block header %}Project Tracker{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="header-actions">
+        <a href="{{ url_for('add_sample') }}" class="main-action-btn">Add New Sample</a>
+        <a href="{{ url_for('prefix_table') }}" class="main-action-btn">Manage Prefixes</a>
+        <a href="{{ url_for('experiments') }}" class="main-action-btn">Experiment Data</a>
+        <a href="{{ url_for('combined_view') }}" class="main-action-btn">Combined View</a>
+        <a href="{{ url_for('compare') }}" class="main-action-btn">Compare Samples</a>
+        <a href="{{ url_for('plots') }}" class="main-action-btn">View Plots</a>
+        <a href="{{ url_for('view_trash') }}" class="main-action-btn">Trash</a>
+    </div>
+
+    <!-- Image Modal -->
+    <div id="imageModal" class="modal">
+        <span class="close">&times;</span>
+        <img class="modal-content" id="modalImage">
+        <div id="modalDescription" class="modal-description"></div>
+    </div>
+
+    <div class="table-container">
+        <table id="sampleTable">
+            <thead>
+                <tr>
+                    <th rowspan="2">ID</th>
+                    <th rowspan="2">Company</th>
+                    <th rowspan="2">ERB</th>
+                    <th rowspan="2">Date</th>
+                    <th rowspan="2">Time</th>
+                    <th rowspan="2">Recipe Front</th>
+                    <th rowspan="2">Recipe Back</th>
+                    <th rowspan="2">Glass Type</th>
+                    <th rowspan="2">Dimensions</th>
+                    <th colspan="3">Process</th>
+                    <th rowspan="2">Done</th>
+                    <th rowspan="2">Sample Image</th>
+                    <th rowspan="2">Actions</th>
+                </tr>
+                <tr>
+                    <th>Cleaning</th>
+                    <th>Coating</th>
+                    <th>Annealing</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sample in samples %}
+                <tr>
+                    <td>{{ sample.id }}</td>
+                    <td>{{ sample.company_name }}</td>
+                    <td>
+                        {% if sample.ERB_description %}
+                        <a href="{{ sample.ERB_description }}" target="_blank">{{ sample.ERB }}</a>
+                        {% else %}
+                        {{ sample.ERB }}
+                        {% endif %}
+                    </td>
+                    <td>{{ sample.date }}</td>
+                    <td>{{ sample.time }} {{ sample.am_pm }}</td>
+                    <td>{{ sample.recipe_front }}</td>
+                    <td>{{ sample.recipe_back }}</td>
+                    <td>{{ sample.glass_type }}</td>
+                    <td>{{ sample.length }}x{{ sample.thickness }}x{{ sample.height }}</td>
+                    <td><span class="status-badge {% if sample.cleaning == 'Y' %}yes{% else %}no{% endif %}">{{ sample.cleaning }}</span></td>
+                    <td><span class="status-badge {% if sample.coating == 'Y' %}yes{% else %}no{% endif %}">{{ sample.coating }}</span></td>
+                    <td><span class="status-badge {% if sample.annealing == 'Y' %}yes{% else %}no{% endif %}">{{ sample.annealing }}</span></td>
+                    <td><span class="status-badge {% if sample.done == 'Y' %}yes{% else %}no{% endif %}">{{ sample.done }}</span></td>
+                    <td>
+                        {% if sample.sample_image %}
+                        <img src="{{ url_for('static', filename=sample.sample_image) }}" 
+                             alt="Sample Image" 
+                             class="sample-thumbnail"
+                             data-description="{{ sample.image_description|default('', true)|replace('\n', ' ')|replace("'", "\\'")|replace('"', '\\"')|safe }}"
+                             onclick="openModal(this.src, this.getAttribute('data-description'))">
+                        {% else %}
+                        No image
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('edit_sample', id=sample.id) }}" class="btn-edit">Edit</a>
+                        <a href="{{ url_for('delete_sample', id=sample.id) }}" class="btn-delete" onclick="return confirm('Are you sure you want to delete this sample?')">Delete</a>
+                        {% if not sample.experiment %}
+                        <a href="{{ url_for('add_experiment', sample_id=sample.id) }}" class="btn-add">Add Experiment</a>
+                        {% else %}
+                        <a href="{{ url_for('edit_experiment', id=sample.id) }}" class="btn-edit">Edit Experiment</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+/* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    padding-top: 50px;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+}
+
+.modal-content {
+    margin: auto;
+    display: block;
+    max-width: 90%;
+    max-height: 80vh;
+}
+
+.modal-description {
+    margin: 20px auto;
+    display: block;
+    width: 90%;
+    max-width: 800px;
+    color: white;
+    text-align: center;
+    font-size: 1.1em;
+    line-height: 1.5;
+}
+
+.close {
+    position: absolute;
+    right: 35px;
+    top: 15px;
+    color: #f1f1f1;
+    font-size: 40px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+/* Thumbnail styles */
+.sample-thumbnail {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: transform 0.2s;
+}
+
+.sample-thumbnail:hover {
+    transform: scale(1.05);
+}
+
+/* Add these styles to your existing styles */
+.process-status {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.process-status div {
+    font-size: 0.9em;
+}
+
+.done-status {
+    margin-top: 4px;
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.main-action-btn {
+    background: #f4f6fa;
+    color: #222;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 1em;
+    padding: 10px 22px;
+    margin-right: 10px;
+    margin-bottom: 10px;
+    box-shadow: 0 2px 8px rgba(80,120,200,0.07);
+    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+    text-decoration: none;
+    display: inline-block;
+}
+.main-action-btn:hover, .main-action-btn:focus {
+    background: #2563eb !important;
+    color: #fff !important;
+    box-shadow: 0 4px 16px rgba(80,120,200,0.13);
+    text-decoration: none;
+}
+</style>
+
+<script>
+// Modal functionality
+function openModal(imgSrc, description) {
+    var modal = document.getElementById("imageModal");
+    var modalImg = document.getElementById("modalImage");
+    var modalDesc = document.getElementById("modalDescription");
+    modal.style.display = "block";
+    modalImg.src = imgSrc;
+    modalDesc.textContent = description || "No description available";
+}
+
+// Close modal when clicking the X or outside the image
+document.addEventListener('DOMContentLoaded', function() {
+    var modal = document.getElementById("imageModal");
+    var span = document.getElementsByClassName("close")[0];
+    
+    span.onclick = function() {
+        modal.style.display = "none";
+    }
+    
+    modal.onclick = function(event) {
+        if (event.target === modal) {
+            modal.style.display = "none";
+        }
+    }
+});
+</script>
+{% endblock %} 

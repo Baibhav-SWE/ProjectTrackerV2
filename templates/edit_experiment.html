@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Experiment{% endblock %}
+
+{% block header %}Edit Experiment Data{% endblock %}
+
+{% block content %}
+<div class="add-button">
+    <a href="{{ url_for('experiments') }}" class="btn-blue">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M15 8H1M8 15L1 8L8 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Back to Experiments
+    </a>
+</div>
+
+<form method="POST" class="form-container">
+    <div class="form-sections">
+        <div class="section">
+            <h3>Experiment Data</h3>
+            <div class="form-group">
+                <label for="transmittance">Transmittance Data:</label>
+                <input type="text" id="transmittance" name="transmittance" value="{{ experiment.transmittance }}">
+            </div>
+            <div class="form-group">
+                <label for="reflectance">Reflectance Data:</label>
+                <input type="text" id="reflectance" name="reflectance" value="{{ experiment.reflectance }}">
+            </div>
+            <div class="form-group">
+                <label for="absorbance">Absorbance Data:</label>
+                <input type="text" id="absorbance" name="absorbance" value="{{ experiment.absorbance }}">
+            </div>
+            <div class="form-group">
+                <label for="plqy">PLQY Data:</label>
+                <input type="text" id="plqy" name="plqy" value="{{ experiment.plqy }}">
+            </div>
+            <div class="form-group">
+                <label for="sem">SEM Data:</label>
+                <input type="text" id="sem" name="sem" value="{{ experiment.sem }}">
+            </div>
+            <div class="form-group">
+                <label for="edx">EDX Data:</label>
+                <input type="text" id="edx" name="edx" value="{{ experiment.edx }}">
+            </div>
+            <div class="form-group">
+                <label for="xrd">XRD Data:</label>
+                <input type="text" id="xrd" name="xrd" value="{{ experiment.xrd }}">
+            </div>
+        </div>
+    </div>
+    <div class="button-group">
+        <button type="submit" class="btn-green">Update Experiment</button>
+    </div>
+</form>
+{% endblock %} 

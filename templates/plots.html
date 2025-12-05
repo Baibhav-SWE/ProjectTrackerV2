@@ -1,0 +1,921 @@
+{% extends "base.html" %}
+
+{% block title %}Experimental Data Plots{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Experimental Data Plots</h2>
+    
+    <!-- Add Plot Entry Form -->
+    <div class="plot-entry-section">
+        <h3>Add Plot Entry</h3>
+        <form method="POST" class="plot-entry-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="sample_id">Sample ID: <span class="required">*</span></label>
+                    <input type="text" id="sample_id" name="sample_id" placeholder="Enter Sample ID (e.g., AWI-Ex001-001)" required>
+                </div>
+                <div class="form-group">
+                    <label for="sharepoint_link">SharePoint Image Link: <span class="required">*</span></label>
+                    <input type="url" id="sharepoint_link" name="sharepoint_link" placeholder="Enter SharePoint link to the plot image" required>
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn-green">Add Plot Entry</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Display Existing Plot Entries -->
+    {% if plots_entries %}
+    <div class="plots-table-section">
+        <h3>Existing Plot Entries</h3>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Sample ID</th>
+                        <th>Company Name</th>
+                        <th>SharePoint Link</th>
+                        <th>Created By</th>
+                        <th>Created At</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for plot, sample in plots_entries %}
+                    <tr>
+                        <td>{{ plot.sample_id }}</td>
+                        <td>{{ sample.company_name if sample else 'Sample Deleted' }}</td>
+                        <td>
+                            <a href="{{ plot.sharepoint_link }}" target="_blank" class="link-cell">
+                                View Plot
+                            </a>
+                        </td>
+                        <td>{{ plot.created_by or 'Unknown' }}</td>
+                        <td>{{ plot.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>
+                            <a href="{{ url_for('delete_plot', plot_id=plot.id) }}" 
+                               class="btn-delete" 
+                               onclick="return confirm('Are you sure you want to delete this plot entry?')">
+                                Delete
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="upload-section">
+        <div class="upload-buttons-container">
+            <div class="form-group">
+                <label class="file-upload-btn">
+                    Upload Pre TRA Data
+                    <input type="file" id="preTRAFile" accept=".csv" style="display: none;">
+                </label>
+                <div id="pre_tra_filename" class="selected-file-name"></div>
+            </div>
+            <div class="form-group">
+                <label class="file-upload-btn">
+                    Upload Post TRA Data
+                    <input type="file" id="postTRAFile" accept=".csv" style="display: none;">
+                </label>
+                <div id="post_tra_filename" class="selected-file-name"></div>
+            </div>
+        </div>
+        <div class="form-group" style="margin-top: 20px;">
+            <button id="downloadPlot" class="download-btn" style="display: none;">Download Plot</button>
+        </div>
+    </div>
+
+    <div id="statsDisplay" class="stats-section" style="display: none;">
+        <h3>Statistics</h3>
+        <div class="stats-grid">
+            <div class="stat-item">
+                <h4>Pre TRA Averages:</h4>
+                <p id="preStats"></p>
+            </div>
+            <div class="stat-item">
+                <h4>Post TRA Averages:</h4>
+                <p id="postStats"></p>
+            </div>
+            <div class="stat-item">
+                <h4>Gains:</h4>
+                <p id="gainStats"></p>
+            </div>
+        </div>
+    </div>
+
+    <div id="seriesControls" class="series-controls" style="display: none;">
+        <div class="form-group">
+            <label><strong>Toggle Data Series:</strong></label>
+            <div id="checkboxContainer" class="checkbox-container"></div>
+        </div>
+    </div>
+
+    <div class="plot-container" id="plotArea"></div>
+</div>
+
+<style>
+    .container {
+        padding: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .controls-section {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+
+    .plot-type-section,
+    .sample-filter-section {
+        flex: 1;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin-top: 5px;
+    }
+
+    .plot-container {
+        width: 100%;
+        height: 800px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 10px;
+        background: #fff;
+        margin-top: 20px;
+    }
+
+    .download-btn {
+        background-color: #4CAF50;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.3s;
+    }
+
+    .download-btn:hover {
+        background-color: #45a049;
+    }
+
+    .series-controls {
+        margin: 20px 0;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background-color: #f9f9f9;
+    }
+
+    .checkbox-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-top: 10px;
+    }
+
+    .series-checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        cursor: pointer;
+        padding: 5px 10px;
+        border-radius: 4px;
+        background-color: white;
+        border: 1px solid #ddd;
+    }
+
+    .series-checkbox-label:hover {
+        background-color: #f0f0f0;
+    }
+
+    .color-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 5px;
+    }
+
+    .stats-section {
+        margin: 20px 0;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background-color: #f9f9f9;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        margin-top: 10px;
+    }
+
+    .stat-item {
+        background: white;
+        padding: 15px;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+    }
+
+    .stat-item h4 {
+        margin: 0 0 10px 0;
+        color: #333;
+    }
+
+    .stat-value {
+        margin: 5px 0;
+        font-family: monospace;
+    }
+
+    .upload-buttons-container {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        margin-bottom: 10px;
+    }
+
+    .upload-section {
+        margin: 20px 0;
+    }
+
+    .file-upload-btn {
+        display: inline-block;
+        padding: 12px 24px;
+        background-color: #4CAF50;
+        color: white !important;
+        border-radius: 6px;
+        cursor: pointer;
+        text-align: center;
+        margin: 10px 0;
+        border: none;
+        font-size: 16px;
+        font-weight: bold;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+        min-width: 200px;
+    }
+
+    .file-upload-btn:hover {
+        background-color: #45a049;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+
+    .selected-file-name {
+        margin-top: 5px;
+        font-size: 14px;
+        color: #666;
+        text-align: center;
+    }
+
+    .range-stats {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px dashed #ddd;
+        font-weight: bold;
+        color: #2196F3;
+    }
+
+    /* Plot Entry Form Styles */
+    .plot-entry-section {
+        margin: 20px 0;
+        padding: 20px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background-color: #f9f9f9;
+    }
+
+    .plot-entry-form {
+        margin-top: 15px;
+    }
+
+    .form-row {
+        display: flex;
+        gap: 20px;
+        align-items: end;
+    }
+
+    .form-group {
+        flex: 1;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+        color: #333;
+    }
+
+    .form-group input {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+
+    .btn-green {
+        background-color: #4CAF50;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.3s;
+    }
+
+    .btn-green:hover {
+        background-color: #45a049;
+    }
+
+    /* Plots Table Styles */
+    .plots-table-section {
+        margin: 20px 0;
+        padding: 20px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background-color: #fff;
+    }
+
+    .table-container {
+        overflow-x: auto;
+        margin-top: 15px;
+    }
+
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+    }
+
+    .data-table th {
+        background-color: #f5f5f5;
+        font-weight: bold;
+        color: #333;
+    }
+
+    .data-table tr:hover {
+        background-color: #f9f9f9;
+    }
+
+    .link-cell a {
+        color: #2196F3;
+        text-decoration: none;
+    }
+
+    .link-cell a:hover {
+        text-decoration: underline;
+    }
+
+    .btn-delete {
+        background-color: #f44336;
+        color: white;
+        padding: 6px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        text-decoration: none;
+        transition: background-color 0.3s;
+    }
+
+    .btn-delete:hover {
+        background-color: #d32f2f;
+    }
+
+    .required {
+        color: #f44336;
+    }
+</style>
+
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        initializePlotHandlers();
+        
+        document.getElementById('downloadPlot').addEventListener('click', function() {
+            const plotArea = document.getElementById('plotArea');
+            if (plotArea && plotArea.data) {
+                Plotly.downloadImage('plotArea', {
+                    format: 'png',
+                    width: 1200,
+                    height: 800,
+                    filename: 'experimental_plot',
+                    scale: 3
+                });
+            }
+        });
+    });
+
+    function initializePlotHandlers() {
+        // Pre TRA file handler
+        document.getElementById('preTRAFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('pre_tra_filename').textContent = file.name;
+                readAndPlotFile(file, 'pre');
+            }
+        });
+
+        // Post TRA file handler
+        document.getElementById('postTRAFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('post_tra_filename').textContent = file.name;
+                readAndPlotFile(file, 'post');
+            }
+        });
+    }
+
+    let currentData = {
+        pre: [],
+        post: []
+    };
+
+    function calculateStatistics(data, type) {
+        if (!data || data.length === 0) return null;
+        
+        console.log('Raw data received:', data);
+        
+        const results = {};
+        
+        // Find all measurement series
+        data.forEach(series => {
+            const name = series.name.toLowerCase();
+            console.log('Processing series:', {
+                name: series.name,
+                dataPoints: series.y.length,
+                firstFewValues: series.y.slice(0, 5)
+            });
+            
+            // Calculate average for Transmittance within 400-1200nm range
+            if (name.includes('transmittance') || name === 't') {
+                let sum = 0;
+                let count = 0;
+                for (let i = 0; i < series.x.length; i++) {
+                    const wavelength = parseFloat(series.x[i]);
+                    if (wavelength >= 400 && wavelength <= 1200) {
+                        sum += parseFloat(series.y[i]);
+                        count++;
+                    }
+                }
+                results.transmittance = count > 0 ? sum / count : 0;
+                console.log('Transmittance calculation:', {
+                    seriesName: series.name,
+                    sum: sum,
+                    count: count,
+                    average: results.transmittance
+                });
+            }
+            
+            // Calculate average for Reflectance within 400-1200nm range
+            if (name.includes('reflectance') || name === 'r') {
+                let sum = 0;
+                let count = 0;
+                for (let i = 0; i < series.x.length; i++) {
+                    const wavelength = parseFloat(series.x[i]);
+                    if (wavelength >= 400 && wavelength <= 1200) {
+                        sum += parseFloat(series.y[i]);
+                        count++;
+                    }
+                }
+                results.reflectance = count > 0 ? sum / count : 0;
+                console.log('Reflectance calculation:', {
+                    seriesName: series.name,
+                    sum: sum,
+                    count: count,
+                    average: results.reflectance
+                });
+            }
+            
+            // Calculate average for Absorbance within 400-1200nm range
+            if (name.includes('absorbance') || name === 'a') {
+                let sum = 0;
+                let count = 0;
+                for (let i = 0; i < series.x.length; i++) {
+                    const wavelength = parseFloat(series.x[i]);
+                    if (wavelength >= 400 && wavelength <= 1200) {
+                        sum += parseFloat(series.y[i]);
+                        count++;
+                    }
+                }
+                results.absorbance = count > 0 ? sum / count : 0;
+                console.log('Absorbance calculation:', {
+                    seriesName: series.name,
+                    sum: sum,
+                    count: count,
+                    average: results.absorbance
+                });
+            }
+        });
+        
+        // Calculate absorbance from transmittance if no direct absorbance values
+        if (!results.absorbance && results.transmittance) {
+            results.absorbance = -Math.log10(results.transmittance / 100);
+            console.log('Calculated absorbance from transmittance:', results.absorbance);
+        }
+        
+        console.log('Final results:', results);
+        return results;
+    }
+
+    function calculateRangeAverage(data, start = 400, end = 1200) {
+        if (!data || !data.x || !data.y) return null;
+        
+        let sum = 0;
+        let count = 0;
+        
+        for (let i = 0; i < data.x.length; i++) {
+            const wavelength = parseFloat(data.x[i]);
+            if (wavelength >= start && wavelength <= end) {
+                sum += parseFloat(data.y[i]);
+                count++;
+            }
+        }
+        
+        return count > 0 ? (sum / count).toFixed(4) : null;
+    }
+
+    function updateStatistics() {
+        console.log('Updating statistics');
+        
+        const preStats = calculateStatistics(currentData.pre);
+        const postStats = calculateStatistics(currentData.post);
+        
+        console.log('Pre Stats:', preStats);
+        console.log('Post Stats:', postStats);
+        
+        const statsDisplay = document.getElementById('statsDisplay');
+        const preStatsElement = document.getElementById('preStats');
+        const postStatsElement = document.getElementById('postStats');
+        const gainStatsElement = document.getElementById('gainStats');
+        
+        // Update Pre TRA stats
+        if (preStats) {
+            preStatsElement.innerHTML = `
+                ${preStats.transmittance !== undefined ? 
+                    `<div class="stat-value">Transmittance: ${preStats.transmittance.toFixed(2)}%</div>` : ''}
+                ${preStats.reflectance !== undefined ? 
+                    `<div class="stat-value">Reflectance: ${preStats.reflectance.toFixed(2)}%</div>` : ''}
+                ${preStats.absorbance !== undefined ? 
+                    `<div class="stat-value">Absorbance: ${preStats.absorbance.toFixed(3)}</div>` : ''}
+            `;
+        }
+        
+        // Update Post TRA stats
+        if (postStats) {
+            postStatsElement.innerHTML = `
+                ${postStats.transmittance !== undefined ? 
+                    `<div class="stat-value">Transmittance: ${postStats.transmittance.toFixed(2)}%</div>` : ''}
+                ${postStats.reflectance !== undefined ? 
+                    `<div class="stat-value">Reflectance: ${postStats.reflectance.toFixed(2)}%</div>` : ''}
+                ${postStats.absorbance !== undefined ? 
+                    `<div class="stat-value">Absorbance: ${postStats.absorbance.toFixed(3)}</div>` : ''}
+            `;
+        }
+        
+        // Calculate and update gains
+        if (preStats && postStats) {
+            const gains = {};
+            
+            if (preStats.transmittance !== undefined && postStats.transmittance !== undefined) {
+                gains.transmittance = ((postStats.transmittance - preStats.transmittance) / preStats.transmittance * 100);
+            }
+            if (preStats.reflectance !== undefined && postStats.reflectance !== undefined) {
+                gains.reflectance = ((postStats.reflectance - preStats.reflectance) / preStats.reflectance * 100);
+            }
+            if (preStats.absorbance !== undefined && postStats.absorbance !== undefined) {
+                gains.absorbance = ((postStats.absorbance - preStats.absorbance) / preStats.absorbance * 100);
+            }
+            
+            gainStatsElement.innerHTML = `
+                ${gains.transmittance !== undefined ? 
+                    `<div class="stat-value">Transmittance Gain: ${gains.transmittance.toFixed(2)}%</div>` : ''}
+                ${gains.reflectance !== undefined ? 
+                    `<div class="stat-value">Reflectance Gain: ${gains.reflectance.toFixed(2)}%</div>` : ''}
+                ${gains.absorbance !== undefined ? 
+                    `<div class="stat-value">Absorbance Change: ${gains.absorbance.toFixed(2)}%</div>` : ''}
+            `;
+        }
+        
+        statsDisplay.style.display = 'block';
+    }
+
+    function readAndPlotFile(file, fileType) {
+        console.log('Reading file:', file.name, 'Type:', fileType);
+        
+        const reader = new FileReader();
+        
+        reader.onload = function(event) {
+            console.log('File loaded successfully');
+            const content = event.target.result;
+            
+            try {
+                const dataSeries = parseCSVData(content, fileType);
+                if (dataSeries.length > 0) {
+                    currentData[fileType] = dataSeries;
+                    const allSeries = [...currentData.pre, ...currentData.post];
+                    createPlot(allSeries);
+                    updateStatistics();  // Update statistics after plotting
+                } else {
+                    console.error('No valid data series found');
+                    alert('No valid data series found in the file. Please check the file format.');
+                }
+            } catch (error) {
+                console.error('Error processing file:', error);
+                alert('Error processing the file. Please check the console for details.');
+            }
+        };
+        
+        reader.onerror = function(error) {
+            console.error('Error reading file:', error);
+            alert('Error reading the file. Please try again.');
+        };
+        
+        reader.readAsText(file);
+    }
+
+    function parseCSVData(csvContent, fileType) {
+        const lines = csvContent.split('\n').filter(line => line.trim() !== '');
+        const delimiter = lines[0].includes('\t') ? '\t' : ',';
+        const headers = lines[0].split(delimiter).map(h => h.trim());
+        
+        const series = {};
+        for (let i = 1; i < headers.length; i++) {
+            const seriesName = fileType === 'post' ? `${headers[i]} (Post TRA)` : headers[i];
+            series[headers[i]] = {
+                x: [],
+                y: [],
+                name: seriesName
+            };
+        }
+        
+        for (let i = 1; i < lines.length; i++) {
+            const values = lines[i].split(delimiter).map(v => v.trim());
+            const wavelength = parseFloat(values[0]);
+            
+            if (!isNaN(wavelength)) {
+                for (let j = 1; j < values.length; j++) {
+                    const value = parseFloat(values[j]);
+                    if (!isNaN(value) && headers[j]) {
+                        series[headers[j]].x.push(wavelength);
+                        series[headers[j]].y.push(value);
+                    }
+                }
+            }
+        }
+        
+        return Object.values(series);
+    }
+
+    function createCheckboxes(dataSeries, colors) {
+        const container = document.getElementById('checkboxContainer');
+        container.innerHTML = ''; // Clear existing checkboxes
+        
+        dataSeries.forEach((series, index) => {
+            const label = document.createElement('label');
+            label.className = 'series-checkbox-label';
+                            
+                            const checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+            checkbox.checked = true;
+            checkbox.dataset.seriesIndex = index;
+            
+            const colorIndicator = document.createElement('span');
+            colorIndicator.className = 'color-indicator';
+            colorIndicator.style.backgroundColor = colors[index % colors.length];
+            
+            const text = document.createTextNode(series.name);
+            
+            label.appendChild(checkbox);
+            label.appendChild(colorIndicator);
+            label.appendChild(text);
+            
+            checkbox.addEventListener('change', function() {
+                updateSeriesVisibility();
+            });
+            
+            container.appendChild(label);
+        });
+        
+        document.getElementById('seriesControls').style.display = 'block';
+    }
+
+    function updateSeriesVisibility() {
+        const plot = document.getElementById('plotArea');
+        const checkboxes = document.querySelectorAll('#checkboxContainer input[type="checkbox"]');
+        
+        const visibility = Array.from(checkboxes).map(cb => cb.checked);
+        
+        Plotly.restyle('plotArea', {
+            visible: visibility
+        });
+    }
+
+    function createPlot(dataSeries) {
+        const colors = [
+            '#0066FF',  // Bright blue
+            '#FF3333',  // Bright red
+            '#33CC33',  // Bright green
+            '#FFD700',  // Gold
+            '#9933FF',  // Bright purple
+            '#FF8000'   // Bright orange
+        ];
+
+        // Create checkboxes first
+        createCheckboxes(dataSeries, colors);
+
+        // Set default plot title and y-axis title
+        const plotTitle = 'TRA vs Wavelength';
+        const yAxisTitle = 'TRA (%)';
+
+        // Calculate statistics for annotations
+        const preStats = calculateStatistics(currentData.pre);
+        const postStats = calculateStatistics(currentData.post);
+        let statsText = '';
+        if (preStats && postStats) {
+            statsText = [
+                '<b>Pre TRA:</b> ' +
+                `T: ${preStats.transmittance?.toFixed(2)}% | R: ${preStats.reflectance?.toFixed(2)}% | A: ${preStats.absorbance?.toFixed(3)}`,
+                '<b>Post TRA:</b> ' +
+                `T: ${postStats.transmittance?.toFixed(2)}% | R: ${postStats.reflectance?.toFixed(2)}% | A: ${postStats.absorbance?.toFixed(3)}`,
+                '<b>Gains:</b> ' +
+                `T: ${((postStats.transmittance - preStats.transmittance) / preStats.transmittance * 100).toFixed(2)}% | ` +
+                `R: ${((postStats.reflectance - preStats.reflectance) / preStats.reflectance * 100).toFixed(2)}% | ` +
+                `A: ${((postStats.absorbance - preStats.absorbance) / preStats.absorbance * 100).toFixed(3)}%`
+            ].join('<br>');
+        }
+
+        const traces = dataSeries.map((series, index) => ({
+            x: series.x,
+            y: series.y,
+            mode: 'lines',
+            type: 'scatter',
+            name: series.name,
+            line: {
+                color: colors[index % colors.length],
+                width: 3,
+                shape: 'spline',
+                smoothing: 1.2
+            },
+            hovertemplate:
+                '<b>%{fullData.name}</b><br>' +
+                'Wavelength: %{x:.0f} nm<br>' +
+                'TRA: %{y:.1f}%<br>' +
+                '<extra></extra>',
+            hoverlabel: {
+                bgcolor: 'white',
+                bordercolor: colors[index % colors.length],
+                font: { 
+                    size: 12,
+                    color: '#333'
+                }
+            }
+        }));
+
+        const layout = {
+            title: {
+                text: plotTitle,
+                font: {
+                    size: 20,
+                    color: '#333'
+                },
+                x: 0.5,
+                y: 0.95
+            },
+            xaxis: {
+                title: {
+                    text: 'Wavelength (nm)',
+                    font: { 
+                        size: 14,
+                        color: '#333'
+                    },
+                    standoff: 20
+                },
+                showgrid: true,
+                gridcolor: '#E5E5E5',
+                gridwidth: 1,
+                zeroline: false,
+                showline: false,
+                tickfont: { 
+                    size: 12,
+                    color: '#333'
+                },
+                range: [300, 1000]
+            },
+            yaxis: {
+                title: {
+                    text: yAxisTitle,
+                    font: { 
+                        size: 14,
+                        color: '#333'
+                    },
+                    standoff: 20
+                },
+                showgrid: true,
+                gridcolor: '#E5E5E5',
+                gridwidth: 1,
+                zeroline: true,
+                zerolinecolor: '#E5E5E5',
+                zerolinewidth: 1,
+                showline: false,
+                tickfont: { 
+                    size: 12,
+                    color: '#333'
+                },
+                range: [-25, 100],
+                dtick: 25
+            },
+            plot_bgcolor: 'white',
+            paper_bgcolor: 'white',
+            height: 1200,
+            margin: { 
+                l: 80,
+                r: 80,
+                t: 60,
+                b: 300
+            },
+            showlegend: true,
+            legend: {
+                x: 0.98,
+                y: 1,
+                xanchor: 'right',
+                yanchor: 'top',
+                bgcolor: 'rgba(255, 255, 255, 0.9)',
+                bordercolor: 'white',
+                font: { 
+                    size: 12,
+                    color: '#333'
+                },
+                itemwidth: 30,
+                itemsizing: 'constant'
+            },
+            annotations: [{
+                xref: 'paper',
+                yref: 'paper',
+                x: 0.5,
+                y: -0.15,
+                xanchor: 'center',
+                yanchor: 'top',
+                text: `<b style="font-size: 16px; color: #333;">Statistics Summary</b><br>${statsText}`,
+                showarrow: false,
+                font: {
+                    family: 'monospace',
+                    size: 14,
+                    color: '#333'
+                },
+                align: 'center',
+                bgcolor: 'white',
+                bordercolor: '#333',
+                borderwidth: 1,
+                borderpad: 10,
+                width: 800
+            }],
+            hovermode: 'closest',
+            hoverdistance: 10
+        };
+
+        const config = {
+            responsive: true,
+            displayModeBar: true,
+            displaylogo: false,
+            scrollZoom: true,
+            toImageButtonOptions: {
+                format: 'png',
+                filename: 'experimental_plot',
+                height: 800,
+                width: 1200,
+                scale: 3
+            }
+        };
+
+        Plotly.newPlot('plotArea', traces, layout, config).then(function() {
+            document.getElementById('downloadPlot').style.display = 'inline-block';
+        });
+
+        // Update plot container height in CSS
+        document.querySelector('.plot-container').style.height = '1200px';
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Experiment Tracker{% endblock %}
+
+{% block header %}Experiment Tracker{% endblock %}
+
+{% block content %}
+<div class="add-button">
+    <a href="{{ url_for('index') }}" class="btn-blue">Back to Samples</a>
+</div>
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Sample ID</th>
+                <th>Transmittance</th>
+                <th>Reflectance</th>
+                <th>Absorbance</th>
+                <th>PLQY</th>
+                <th>SEM</th>
+                <th>EDX</th>
+                <th>XRD</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for experiment in experiments %}
+            <tr>
+                <td class="center">{{ experiment.id }}</td>
+                <td class="center">
+                    {% if experiment.transmittance %}
+                        <a href="{{ experiment.transmittance }}" target="_blank">View</a>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if experiment.reflectance %}
+                        <a href="{{ experiment.reflectance }}" target="_blank">View</a>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if experiment.absorbance %}
+                        <a href="{{ experiment.absorbance }}" target="_blank">View</a>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if experiment.plqy %}
+                        <a href="{{ experiment.plqy }}" target="_blank">View</a>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if experiment.sem %}
+                        <a href="{{ experiment.sem }}" target="_blank">View</a>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if experiment.edx %}
+                        <a href="{{ experiment.edx }}" target="_blank">View</a>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if experiment.xrd %}
+                        <a href="{{ experiment.xrd }}" target="_blank">View</a>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{{ url_for('edit_experiment', id=experiment.id) }}" class="link-blue">Edit</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %} 

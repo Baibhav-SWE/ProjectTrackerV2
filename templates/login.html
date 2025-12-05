@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<style>
+    body.login-bg {
+        background: #000 !important;
+    }
+    .login-header {
+        text-align: center;
+        margin-top: 48px;
+        margin-bottom: 18px;
+        background: transparent !important;
+    }
+    .login-header .app-title {
+        font-size: 2.6rem;
+        font-weight: 900;
+        color: #ff1825;
+        letter-spacing: 1px;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    }
+    .login-header .app-tagline {
+        color: #fff;
+        font-size: 1.15rem;
+        margin-top: 8px;
+        margin-bottom: 0;
+        font-weight: 400;
+        letter-spacing: 0.2px;
+    }
+    .login-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 70vh;
+        background: transparent !important;
+    }
+    .login-box {
+        background: #232b3e;
+        padding: 38px 32px 28px 32px;
+        border-radius: 22px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 1.5px 8px rgba(122,6,20,0.08);
+        width: 100%;
+        max-width: 410px;
+        text-align: center;
+        position: relative;
+        color: #fff;
+    }
+    .login-logo {
+        margin-bottom: 18px;
+    }
+    .login-logo img {
+        height: 60px;
+        margin-bottom: 8px;
+    }
+    .login-form h1 {
+        color: #fff;
+        font-size: 2rem;
+        margin-bottom: 18px;
+        font-weight: 700;
+    }
+    .form-group label {
+        color: #f9e6e4;
+        font-weight: 600;
+        margin-bottom: 6px;
+        display: block;
+        text-align: left;
+    }
+    .form-group input[type="text"],
+    .form-group input[type="password"] {
+        width: 100%;
+        padding: 13px 15px;
+        border: none;
+        border-radius: 10px;
+        margin-bottom: 16px;
+        font-size: 1.08em;
+        background: #e6eaf1;
+        color: #222;
+        transition: box-shadow 0.2s;
+        box-shadow: 0 1.5px 6px rgba(0,0,0,0.04);
+    }
+    .form-group input:focus {
+        outline: 2px solid #fb1321;
+        background: #fff;
+    }
+    .login-form button[type="submit"], .btn-login {
+        width: 100%;
+        padding: 13px;
+        background: #ff1825;
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        font-size: 1.1em;
+        font-weight: 700;
+        cursor: pointer;
+        margin-top: 8px;
+        margin-bottom: 8px;
+        box-shadow: 0 2px 8px rgba(251,19,33,0.08);
+        transition: background 0.2s, color 0.2s;
+    }
+    .login-form button[type="submit"]:hover, .btn-login:hover {
+        background: #ba1022;
+        color: #fff;
+    }
+    .form-links {
+        margin-top: 10px;
+        text-align: center;
+    }
+    .form-links a {
+        color: #fc8c74;
+        text-decoration: none;
+        font-size: 1em;
+        transition: color 0.2s;
+        font-weight: 500;
+    }
+    .form-links a:hover {
+        color: #fff;
+        text-decoration: underline;
+    }
+    .register-link {
+        color: #fff;
+        font-weight: 700;
+        margin-top: 8px;
+        display: block;
+        font-size: 1.05em;
+    }
+    .register-link a {
+        color: #fc8c74;
+        text-decoration: underline;
+        font-weight: 700;
+    }
+    .register-link a:hover {
+        color: #ff1825;
+    }
+    .alert {
+        background: #fb3c4c;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        margin-bottom: 18px;
+        font-size: 1em;
+        font-weight: 500;
+    }
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.body.classList.add('login-bg');
+});
+</script>
+<div class="login-header">
+    <div class="app-title">Project Tracker</div>
+    <div class="app-tagline">Discover the Perfect Project Management: Organize, Track, and Succeed.</div>
+</div>
+<div class="login-container">
+    <div class="login-box">
+        <div class="login-logo">
+            <img src="{{ url_for('static', filename='awi_logo.jpg') }}" alt="AWI Logo">
+        </div>
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        <!-- Login Form -->
+        <form method="POST" action="{{ url_for('login') }}" class="login-form" id="loginForm">
+            <h1>Login</h1>
+            <div class="form-group">
+                <input type="text" id="username" name="username" placeholder="Enter your email" required>
+            </div>
+            <div class="form-group">
+                <input type="password" id="password" name="password" placeholder="Enter your password" required>
+            </div>
+            <div class="form-group">
+                <button type="submit">Login</button>
+            </div>
+            <div class="form-links">
+                <a href="{{ url_for('forgot_password') }}">Forgot Password?</a>
+            </div>
+            <div class="register-link">
+                Don't have an account? <a href="#" onclick="showRegister();return false;">Register here</a>
+            </div>
+        </form>
+        <!-- Registration Form (hidden by default) -->
+        <form method="POST" action="{{ url_for('register') }}" class="login-form" id="registerForm" style="display: none;">
+            <h1>Register</h1>
+            <div class="form-group">
+                <label for="reg-username">Username</label>
+                <input type="text" id="reg-username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="reg-email">Email</label>
+                <input type="email" id="reg-email" name="email" required>
+            </div>
+            <div class="form-group">
+                <label for="reg-password">Password</label>
+                <input type="password" id="reg-password" name="password" required>
+            </div>
+            <div class="form-group">
+                <label for="confirm-password">Confirm Password</label>
+                <input type="password" id="confirm-password" name="confirm_password" required>
+            </div>
+            <button type="submit" class="btn-login">Register</button>
+            <div class="form-links">
+                <a href="#" onclick="showLogin();return false;">Back to Login</a>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+function showLogin() {
+    document.getElementById('loginForm').style.display = 'block';
+    document.getElementById('registerForm').style.display = 'none';
+}
+
+function showRegister() {
+    document.getElementById('loginForm').style.display = 'none';
+    document.getElementById('registerForm').style.display = 'block';
+}
+</script>
+{% endblock %} 

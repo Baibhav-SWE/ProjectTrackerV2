@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Edit Sample - Project Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Edit Sample</h1>
+        <form method="POST" enctype="multipart/form-data" onsubmit="return validateForm()">
+            <div class="form-group">
+                <label>Company: <span class="required">*</span></label>
+                <select name="company_prefix" required>
+                    <option value="">Select a Company</option>
+                    {% for prefix in prefixes %}
+                    <option value="{{ prefix.prefix }}" {% if prefix.full_form == sample.company_name %}selected{% endif %}>{{ prefix.full_form }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>ERB:</label>
+                <input type="text" name="ERB" value="{{ sample.ERB }}">
+            </div>
+            <div class="form-group">
+                <label>ERB Description:</label>
+                <textarea name="ERB_description" rows="3">{{ sample.ERB_description }}</textarea>
+            </div>
+            <div class="form-group">
+                <label>ID: <span class="required">*</span></label>
+                <input type="text" name="id" value="{{ sample.id }}" required>
+            </div>
+            <div class="form-group">
+                <label>Date: <span class="required">*</span></label>
+                <div class="date-input-container">
+                    <input type="text" 
+                           name="date" 
+                           id="dateDisplay" 
+                           value="{{ sample.date }}"
+                           pattern="(0[1-9]|1[0-2])/(0[1-9]|[12][0-9]|3[01])/[0-9]{4}"
+                           title="Please enter date in MM/DD/YYYY format"
+                           required>
+                    <input type="date" 
+                           id="datePicker" 
+                           class="calendar-picker"
+                           aria-label="Select date">
+                    <button type="button" class="calendar-toggle" onclick="document.getElementById('datePicker').showPicker()">
+                        📅
+                    </button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Time: <span class="required">*</span></label>
+                <input type="time" 
+                       name="time" 
+                       id="time" 
+                       value="{{ sample.time }}" 
+                       required
+                       onchange="updateAmPm(this)">
+                <input type="hidden" name="am_pm" id="am_pm" value="{{ sample.am_pm }}">
+            </div>
+            <div class="form-group">
+                <label>Recipe Front: <span class="required">*</span></label>
+                <input type="text" name="recipe_front" value="{{ sample.recipe_front }}" required>
+            </div>
+            <div class="form-group">
+                <label>Recipe Back: <span class="required">*</span></label>
+                <input type="text" name="recipe_back" value="{{ sample.recipe_back }}" required>
+            </div>
+            <div class="form-group">
+                <label>Glass Type: <span class="required">*</span></label>
+                <input type="text" name="glass_type" value="{{ sample.glass_type }}" required>
+            </div>
+            <div class="form-group">
+                <label>Dimensions (mm): <span class="required">*</span></label>
+                <input type="number" name="length" value="{{ sample.length }}" required>
+                <input type="number" name="thickness" value="{{ sample.thickness }}" required>
+                <input type="number" name="height" value="{{ sample.height }}" required>
+            </div>
+            <div class="form-group">
+                <label>Process:</label>
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox" name="cleaning" value="on" 
+                               {% if sample.cleaning == 'Y' %}checked{% endif %}> Cleaning
+                    </label>
+                    <label>
+                        <input type="checkbox" name="coating" value="on" 
+                               {% if sample.coating == 'Y' %}checked{% endif %}> Coating
+                    </label>
+                    <label>
+                        <input type="checkbox" name="annealing" value="on" 
+                               {% if sample.annealing == 'Y' %}checked{% endif %}> Annealing
+                    </label>
+                </div>
+                <small class="form-text text-muted">All processes must be completed for the sample to be marked as Done</small>
+            </div>
+            <div class="form-group">
+                <label>Sample Image:</label>
+                {% if sample.sample_image %}
+                    <div class="current-image">
+                        <img src="{{ url_for('static', filename=sample.sample_image) }}" alt="Current sample image" style="max-width: 200px;">
+                        <p>Current image</p>
+                    </div>
+                {% endif %}
+                <input type="file" name="sample_image" accept=".jpg,.jpeg,.png">
+                <small class="form-text text-muted">Upload a new sample image (JPG, JPEG, or PNG format)</small>
+            </div>
+            <div class="form-group">
+                <label>Image Description:</label>
+                <textarea name="image_description" rows="3" placeholder="Enter a description of the sample image">{{ sample.image_description }}</textarea>
+                <small class="form-text text-muted">Describe what the image shows or any important details</small>
+            </div>
+            <button type="submit" class="btn">Update Sample</button>
+            <a href="{{ url_for('index') }}" class="btn">Cancel</a>
+        </form>
+    </div>
+    <script>
+        window.onload = function() {
+            initializeDateAndTime();
+        };
+
+        function initializeDateAndTime() {
+            const dateDisplay = document.getElementById('dateDisplay');
+            const datePicker = document.getElementById('datePicker');
+            const timeInput = document.getElementById('time');
+            
+            // Convert MM/DD/YYYY to YYYY-MM-DD for date picker
+            const [month, day, year] = dateDisplay.value.split('/');
+            datePicker.value = `${year}-${month}-${day}`;
+            
+            // Set up date picker change handler
+            datePicker.addEventListener('change', function() {
+                const selectedDate = new Date(this.value);
+                const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                const d = String(selectedDate.getDate()).padStart(2, '0');
+                const y = selectedDate.getFullYear();
+                dateDisplay.value = `${m}/${d}/${y}`;
+            });
+
+            // Set up manual date input handler
+            dateDisplay.addEventListener('input', function(e) {
+                let value = e.target.value.replace(/\D/g, '');
+                if (value.length >= 4) {
+                    value = value.slice(0,2) + '/' + value.slice(2,4) + '/' + value.slice(4);
+                } else if (value.length >= 2) {
+                    value = value.slice(0,2) + '/' + value.slice(2);
+                }
+                e.target.value = value;
+
+                // Update date picker if valid date
+                const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                if (match) {
+                    const [_, mm, dd, yyyy] = match;
+                    datePicker.value = `${yyyy}-${mm}-${dd}`;
+                }
+            });
+
+            updateAmPm(timeInput);
+        }
+
+        function updateAmPm(timeInput) {
+            const amPmInput = document.getElementById('am_pm');
+            const time = timeInput.value;
+            if (time) {
+                const hours = parseInt(time.split(':')[0]);
+                amPmInput.value = hours >= 12 ? 'PM' : 'AM';
+            }
+        }
+
+        function validateForm() {
+            const dateInput = document.getElementById('dateDisplay');
+            const dateValue = dateInput.value;
+            
+            // Check date format
+            const datePattern = /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/[0-9]{4}$/;
+            if (!datePattern.test(dateValue)) {
+                alert('Please enter date in MM/DD/YYYY format');
+                return false;
+            }
+
+            // Validate date values
+            const [month, day, year] = dateValue.split('/').map(Number);
+            const date = new Date(year, month - 1, day);
+            
+            if (date.getMonth() !== month - 1 || date.getDate() !== day) {
+                alert('Please enter a valid date');
+                return false;
+            }
+
+            return true;
+        }
+    </script>
+</body>
+</html> 

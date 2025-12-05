@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .stats-card {
+        margin-bottom: 20px;
+    }
+    .stats-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #007bff;
+    }
+    .stats-label {
+        font-size: 14px;
+        color: #6c757d;
+    }
+    .plot-container {
+        margin-bottom: 30px;
+    }
+    .error-message {
+        background-color: #f8d7da;
+        color: #721c24;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border: 1px solid #f5c6cb;
+        border-radius: 0.25rem;
+    }
+    .stats-section {
+        margin: 20px 0;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background-color: #f9f9f9;
+    }
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        margin-top: 10px;
+    }
+    .stat-item {
+        background: white;
+        padding: 15px;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+    }
+    .stat-item h4 {
+        margin: 0 0 10px 0;
+        color: #333;
+    }
+    .stat-value {
+        margin: 5px 0;
+        font-family: monospace;
+    }
+    .statistics-section {
+        margin: 20px 0;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+    }
+    .statistics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-top: 15px;
+    }
+    .stat-group {
+        background: white;
+        padding: 15px;
+        border-radius: 6px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .stat-group h4 {
+        margin: 0 0 10px 0;
+        color: #333;
+        border-bottom: 2px solid #eee;
+        padding-bottom: 5px;
+    }
+    .stat-group p {
+        margin: 5px 0;
+        font-family: monospace;
+        font-size: 14px;
+    }
+    .gain {
+        font-weight: bold;
+        margin-top: 10px !important;
+        padding-top: 5px;
+        border-top: 1px dashed #eee;
+    }
+    .gain.positive {
+        color: #28a745;
+    }
+    .gain.negative {
+        color: #dc3545;
+    }
+</style>
+
+<div class="container mt-4">
+    <h2>Compare Pre and Post Data</h2>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {% if error %}
+        <div class="alert alert-danger">
+            An error occurred while processing the data. Please try again.
+        </div>
+    {% endif %}
+
+    {% if show_selection %}
+        <form method="POST" class="mb-4">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="pre_file_id"><strong>Select Pre-Data File:</strong></label>
+                        <select class="form-control" id="pre_file_id" name="pre_file_id" required>
+                            <option value="">Choose a file...</option>
+                            {% for file in pre_data_files %}
+                                <option value="{{ file._id }}" {% if selected_pre_file == file._id %}selected{% endif %}>
+                                    {{ file.design_name or 'Unnamed Design' }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="post_file_id"><strong>Select Post-Data File:</strong></label>
+                        <select class="form-control" id="post_file_id" name="post_file_id" required>
+                            <option value="">Choose a file...</option>
+                            {% for file in post_data_files %}
+                                <option value="{{ file._id }}" {% if selected_post_file == file._id %}selected{% endif %}>
+                                    {{ file.design_name or 'Unnamed Design' }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="text-center mt-3">
+                <button type="submit" class="btn btn-primary">Compare Selected Files</button>
+            </div>
+        </form>
+    {% endif %}
+
+    {% if not error and transmittance_plot %}
+    <div class="statistics-section">
+        <h3>Statistics </h3>
+        <div class="statistics-grid">
+            <div class="stat-group">
+                <h4>Average Transmittance</h4>
+                <p>Pre: {{ "%.2f"|format(pre_avg_transmittance) }}%</p>
+                <p>Post: {{ "%.2f"|format(post_avg_transmittance) }}%</p>
+                <p class="gain {% if transmittance_gain > 0 %}positive{% elif transmittance_gain < 0 %}negative{% endif %}">
+                    Gain: {{ "%+.2f"|format(transmittance_gain) }}%
+                </p>
+            </div>
+            <div class="stat-group">
+                <h4>Average Reflectance</h4>
+                <p>Pre: {{ "%.2f"|format(pre_avg_reflectance) }}%</p>
+                <p>Post: {{ "%.2f"|format(post_avg_reflectance) }}%</p>
+                <p class="gain {% if reflectance_gain > 0 %}positive{% elif reflectance_gain < 0 %}negative{% endif %}">
+                    Gain: {{ "%+.2f"|format(reflectance_gain) }}%
+                </p>
+            </div>
+            <div class="stat-group">
+                <h4>Average Absorbance</h4>
+                <p>Pre: {{ "%.2f"|format(pre_avg_absorbance) }}</p>
+                <p>Post: {{ "%.2f"|format(post_avg_absorbance) }}</p>
+                <p class="gain {% if absorbance_gain > 0 %}positive{% elif absorbance_gain < 0 %}negative{% endif %}">
+                    Gain: {{ "%+.2f"|format(absorbance_gain) }}%
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="plots-section">
+        <div id="transmittancePlot"></div>
+        <div id="reflectancePlot"></div>
+        <div id="absorbancePlot"></div>
+    </div>
+    {% endif %}
+</div>
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+    // Parse the plot data from the server
+    var transmittancePlot = {{ transmittance_plot | safe }};
+    var reflectancePlot = {{ reflectance_plot | safe }};
+    var absorbancePlot = {{ absorbance_plot | safe }};
+
+    console.log('Transmittance Plot Data:', transmittancePlot);
+    console.log('Reflectance Plot Data:', reflectancePlot);
+    console.log('Absorbance Plot Data:', absorbancePlot);
+
+    // Create the plots
+    Plotly.newPlot('transmittancePlot', transmittancePlot.data, transmittancePlot.layout);
+    Plotly.newPlot('reflectancePlot', reflectancePlot.data, reflectancePlot.layout);
+    Plotly.newPlot('absorbancePlot', absorbancePlot.data, absorbancePlot.layout);
+
+    function calculateStatistics(data, type) {
+        console.log(`Calculating statistics for ${type}:`, data);
+        
+        if (!data || !data.data || data.data.length < 2) {
+            console.log('No valid data available');
+            return 0;
+        }
+        
+        // Get the correct trace based on type
+        let trace;
+        if (type.startsWith('pre_') || type === 'transmittance' || type === 'reflectance' || type === 'absorbance') {
+            trace = data.data[0]; // Pre-data is first trace
+        } else {
+            trace = data.data[1]; // Post-data is second trace
+        }
+        
+        if (!trace || !trace.x || !trace.y) {
+            console.log('No trace data found');
+            return 0;
+        }
+        
+        console.log('Processing trace:', trace.name);
+        console.log('X values:', trace.x);
+        console.log('Y values:', trace.y);
+        
+        let validValues = [];
+        for (let i = 0; i < trace.x.length; i++) {
+            const wavelength = parseFloat(trace.x[i]);
+            const value = parseFloat(trace.y[i]);
+            
+            if (wavelength >= 400 && wavelength <= 1200 && !isNaN(value) && value > 0) {
+                validValues.push(value);
+            }
+        }
+        
+        console.log('Valid values:', validValues);
+        
+        if (validValues.length === 0) {
+            console.log('No valid values found for averaging');
+            return 0;
+        }
+        
+        const average = validValues.reduce((a, b) => a + b, 0) / validValues.length;
+        console.log(`Average: ${average}`);
+        return average;
+    }
+
+    // Calculate statistics
+    const preTransmittance = calculateStatistics(transmittancePlot, 'pre_transmittance');
+    const postTransmittance = calculateStatistics(transmittancePlot, 'post_transmittance');
+    const preReflectance = calculateStatistics(reflectancePlot, 'pre_reflectance');
+    const postReflectance = calculateStatistics(reflectancePlot, 'post_reflectance');
+    const preAbsorbance = calculateStatistics(absorbancePlot, 'pre_absorbance');
+    const postAbsorbance = calculateStatistics(absorbancePlot, 'post_absorbance');
+
+    console.log('Final Statistics:');
+    console.log('Pre-Transmittance:', preTransmittance);
+    console.log('Post-Transmittance:', postTransmittance);
+    console.log('Pre-Reflectance:', preReflectance);
+    console.log('Post-Reflectance:', postReflectance);
+    console.log('Pre-Absorbance:', preAbsorbance);
+    console.log('Post-Absorbance:', postAbsorbance);
+
+    // Calculate gains
+    function calculateGain(preValue, postValue) {
+        if (preValue <= 0) return 0;
+        return ((postValue - preValue) / preValue) * 100;
+    }
+
+    const transmittanceGain = calculateGain(preTransmittance, postTransmittance);
+    const reflectanceGain = calculateGain(preReflectance, postReflectance);
+    const absorbanceGain = calculateGain(preAbsorbance, postAbsorbance);
+
+    console.log('Gains:');
+    console.log('Transmittance Gain:', transmittanceGain);
+    console.log('Reflectance Gain:', reflectanceGain);
+    console.log('Absorbance Gain:', absorbanceGain);
+</script>
+{% endblock %} 

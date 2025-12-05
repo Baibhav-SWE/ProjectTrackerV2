@@ -1,0 +1,34 @@
+language = "python3"
+run = "python app.py"
+entrypoint = "app.py"
+
+[nix]
+channel = "stable-22_11"
+
+[env]
+PYTHONPATH = "${REPL_HOME}/venv/lib/python3.10/site-packages"
+PATH = "${REPL_HOME}/venv/bin"
+
+[packager]
+language = "python3"
+ignoredPackages = ["unit_tests"]
+
+[packager.features]
+enabledForHosting = true
+packageSearch = true
+guessImports = true
+
+[languages]
+[languages.python3]
+pattern = "**/*.py"
+syntax = "python"
+
+[languages.python3.languageServer]
+start = "pylsp"
+
+[deployment]
+run = ["sh", "-c", "python app.py"]
+deploymentTarget = "cloudrun"
+
+[unitTest]
+language = "python3" 

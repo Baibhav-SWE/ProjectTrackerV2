@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}Add New Sample{% endblock %}
+
+{% block header %}Add New Sample{% endblock %}
+
+{% block content %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add New Sample</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .plot-container {
+            width: 100%;
+            margin: 20px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            background: #fff;
+        }
+        
+        .plots-wrapper {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .plot-section {
+            flex: 1;
+        }
+        
+        input[type="file"] {
+            margin: 10px 0;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Add New Sample</h2>
+        <form method="POST" enctype="multipart/form-data">
+            <div class="form-sections">
+                <div class="section">
+                    <h3>Sample Details</h3>
+                    <div class="form-group">
+                        <label>Company: <span class="required">*</span></label>
+                        <select name="company_prefix" required>
+                            <option value="">Select a Company</option>
+                            {% for prefix in prefixes %}
+                            <option value="{{ prefix.prefix }}">{{ prefix.full_form }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>ERB: <span class="required">*</span></label>
+                        <input type="text" name="ERB" placeholder="Enter ERB" required>
+                    </div>
+                    <div class="form-group">
+                        <label>ERB Description:</label>
+                        <input type="url" name="ERB_description" placeholder="SharePoint link">
+                    </div>
+                    <div class="form-group">
+                        <label>Sample ID: <span class="required">*</span></label>
+                        <input type="text" name="sample_id" id="sample_id" placeholder="Enter Sample ID part (e.g., 001)" required>
+                        <small class="form-text text-muted">Enter only the sample ID part. Full ID will be: <span id="full_id_preview">PREFIX-ExERB-XXX</span></small>
+                    </div>
+                    <div class="form-group">
+                        <label>Date: <span class="required">*</span></label>
+                        <div class="date-input-container">
+                            <input type="text" 
+                                   name="date" 
+                                   id="dateDisplay" 
+                                   placeholder="MM/DD/YYYY" 
+                                   pattern="(0[1-9]|1[0-2])/(0[1-9]|[12][0-9]|3[01])/[0-9]{4}"
+                                   title="Please enter date in MM/DD/YYYY format"
+                                   required>
+                            <input type="date" 
+                                   id="datePicker" 
+                                   class="calendar-picker"
+                                   aria-label="Select date">
+                            <button type="button" class="calendar-toggle" onclick="document.getElementById('datePicker').showPicker()">
+                                📅
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="time">Time:<span class="required">*</span></label>
+                        <input type="time" 
+                               id="time" 
+                               name="time" 
+                               required 
+                               onchange="updateAmPm(this)">
+                        <input type="hidden" name="am_pm" id="am_pm">
+                    </div>
+                    <div class="form-group">
+                        <label>Recipe Front: <span class="required">*</span></label>
+                        <input type="text" name="recipe_front" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Recipe Back: <span class="required">*</span></label>
+                        <input type="text" name="recipe_back" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Glass Type: <span class="required">*</span></label>
+                        <input type="text" name="glass_type" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Dimensions (mm): <span class="required">*</span></label>
+                        <div class="dimensions-group">
+                            <div>
+                                <label>Length:</label>
+                                <input type="number" name="length" required>
+                            </div>
+                            <div>
+                                <label>Thickness:</label>
+                                <input type="number" name="thickness" required>
+                            </div>
+                            <div>
+                                <label>Height:</label>
+                                <input type="number" name="height" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Process:</label>
+                        <div class="checkbox-group">
+                            <label>
+                                <input type="checkbox" name="cleaning" value="on"> Cleaning
+                            </label>
+                            <label>
+                                <input type="checkbox" name="coating" value="on"> Coating
+                            </label>
+                            <label>
+                                <input type="checkbox" name="annealing" value="on"> Annealing
+                            </label>
+                        </div>
+                        <small class="form-text text-muted">All processes must be completed for the sample to be marked as Done</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Sample Image:</label>
+                        <input type="file" name="sample_image" accept=".jpg,.jpeg,.png">
+                        <small class="form-text text-muted">Upload a sample image (JPG, JPEG, or PNG format)</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Image Description:</label>
+                        <textarea name="image_description" rows="3" placeholder="Enter a description of the sample image"></textarea>
+                        <small class="form-text text-muted">Describe what the image shows or any important details</small>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Experiment Details</h3>
+                    <div class="form-group">
+                        <label>Transmittance Link:</label>
+                        <input type="url" name="transmittance" placeholder="SharePoint link">
+                    </div>
+                    <div class="form-group">
+                        <label>Reflectance Link:</label>
+                        <input type="url" name="reflectance" placeholder="SharePoint link">
+                    </div>
+                    <div class="form-group">
+                        <label>Absorbance Link:</label>
+                        <input type="url" name="absorbance" placeholder="SharePoint link">
+                    </div>
+                    <div class="form-group">
+                        <label>PLQY Link:</label>
+                        <input type="url" name="plqy" placeholder="SharePoint link">
+                    </div>
+                    <div class="form-group">
+                        <label>SEM Link:</label>
+                        <input type="url" name="sem" placeholder="SharePoint link">
+                    </div>
+                    <div class="form-group">
+                        <label>EDX Link:</label>
+                        <input type="url" name="edx" placeholder="SharePoint link">
+                    </div>
+                    <div class="form-group">
+                        <label>XRD Link:</label>
+                        <input type="url" name="xrd" placeholder="SharePoint link">
+                    </div>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button type="submit" class="btn-green">Add Sample</button>
+                <a href="{{ url_for('index') }}" class="back-link">Back to List</a>
+            </div>
+            <div class="required-note">* Required fields</div>
+        </form>
+    </div>
+    <script>
+        window.onload = function() {
+            initializeDateAndTime();
+            initializeIdGeneration();
+        };
+
+        function initializeIdGeneration() {
+            const companySelect = document.querySelector('select[name="company_prefix"]');
+            const erbInput = document.querySelector('input[name="ERB"]');
+            const sampleIdInput = document.querySelector('input[name="sample_id"]');
+            const fullIdPreview = document.getElementById('full_id_preview');
+
+            function updateId() {
+                const prefix = companySelect.value;
+                const erb = erbInput.value;
+                const sampleId = sampleIdInput.value;
+                if (prefix && erb && sampleId) {
+                    fullIdPreview.textContent = `${prefix}-Ex${erb}-${sampleId}`;
+                } else {
+                    fullIdPreview.textContent = 'PREFIX-ExERB-XXX';
+                }
+            }
+
+            companySelect.addEventListener('change', updateId);
+            erbInput.addEventListener('input', updateId);
+            sampleIdInput.addEventListener('input', updateId);
+        }
+
+        function initializeDateAndTime() {
+            const dateDisplay = document.getElementById('dateDisplay');
+            const datePicker = document.getElementById('datePicker');
+            const timeInput = document.getElementById('time');
+            const amPmInput = document.getElementById('am_pm');
+            const now = new Date();
+            
+            // Format and set default date
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const year = now.getFullYear();
+            
+            dateDisplay.value = `${month}/${day}/${year}`;
+            datePicker.value = `${year}-${month}-${day}`; // Set date picker value in YYYY-MM-DD format
+            
+            // Set up date picker change handler
+            datePicker.addEventListener('change', function() {
+                const selectedDate = new Date(this.value);
+                const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                const d = String(selectedDate.getDate()).padStart(2, '0');
+                const y = selectedDate.getFullYear();
+                dateDisplay.value = `${m}/${d}/${y}`;
+            });
+
+            // Set up manual date input handler
+            dateDisplay.addEventListener('input', function(e) {
+                let value = e.target.value.replace(/\D/g, '');
+                if (value.length >= 4) {
+                    value = value.slice(0,2) + '/' + value.slice(2,4) + '/' + value.slice(4);
+                } else if (value.length >= 2) {
+                    value = value.slice(0,2) + '/' + value.slice(2);
+                }
+                e.target.value = value;
+
+                // Update date picker if valid date
+                const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                if (match) {
+                    const [_, mm, dd, yyyy] = match;
+                    datePicker.value = `${yyyy}-${mm}-${dd}`;
+                }
+            });
+
+            // Set default time
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            timeInput.value = `${hours}:${minutes}`;
+            updateAmPm(timeInput);
+        }
+
+        function updateAmPm(timeInput) {
+            const amPmInput = document.getElementById('am_pm');
+            const time = timeInput.value;
+            if (time) {
+                const hours = parseInt(time.split(':')[0]);
+                amPmInput.value = hours >= 12 ? 'PM' : 'AM';
+            }
+        }
+
+        function validateForm() {
+            const dateInput = document.getElementById('dateDisplay');
+            const dateValue = dateInput.value;
+            
+            // Check date format
+            const datePattern = /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/[0-9]{4}$/;
+            if (!datePattern.test(dateValue)) {
+                alert('Please enter date in MM/DD/YYYY format');
+                return false;
+            }
+
+            // Validate date values
+            const [month, day, year] = dateValue.split('/').map(Number);
+            const date = new Date(year, month - 1, day);
+            
+            if (date.getMonth() !== month - 1 || date.getDate() !== day) {
+                alert('Please enter a valid date');
+                return false;
+            }
+
+            return true;
+        }
+    </script>
+</body>
+</html>
+{% endblock %} 

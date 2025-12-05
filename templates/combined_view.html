@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+
+{% block title %}Combined View{% endblock %}
+
+{% block header %}Combined View{% endblock %}
+
+{% block content %}
+<div class="add-button">
+    <a href="{{ url_for('index') }}" class="btn-blue">Back to Samples</a>
+    <a href="{{ url_for('experiments') }}" class="btn-blue">Experiment Tracker</a>
+</div>
+
+<!-- Wrap filters in a container -->
+<div class="filter-container">
+    <div class="filter-row">
+        <select data-column="0">
+            <option value="">All IDs</option>
+            {% for sample, _ in results %}
+                <option value="{{ sample.id }}">{{ sample.id }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" placeholder="Filter Company" data-column="1">
+        <input type="text" placeholder="Filter ERB" data-column="2">
+        <input type="text" placeholder="Filter ERB Description" data-column="3">
+        <input type="text" placeholder="Filter Date" data-column="4">
+        <input type="text" placeholder="Filter Time" data-column="5">
+        <input type="text" placeholder="Filter Recipe Front" data-column="6">
+        <input type="text" placeholder="Filter Recipe Back" data-column="7">
+        <input type="text" placeholder="Filter Glass Type" data-column="8">
+        <input type="text" placeholder="Filter Dimensions" data-column="9">
+        <select data-column="10">
+            <option value="">All Cleaning</option>
+            <option value="Y">Y</option>
+            <option value="N">N</option>
+        </select>
+        <select data-column="11">
+            <option value="">All Coating</option>
+            <option value="Y">Y</option>
+            <option value="N">N</option>
+        </select>
+        <select data-column="12">
+            <option value="">All Annealing</option>
+            <option value="Y">Y</option>
+            <option value="N">N</option>
+        </select>
+        <select data-column="13">
+            <option value="">All Done</option>
+            <option value="Y">Y</option>
+            <option value="N">N</option>
+        </select>
+        <select data-column="14">
+            <option value="">All Transmittance</option>
+            <option value="has">Has Data</option>
+            <option value="no">No Data</option>
+        </select>
+        <select data-column="15">
+            <option value="">All Reflectance</option>
+            <option value="has">Has Data</option>
+            <option value="no">No Data</option>
+        </select>
+        <select data-column="16">
+            <option value="">All Absorbance</option>
+            <option value="has">Has Data</option>
+            <option value="no">No Data</option>
+        </select>
+        <select data-column="17">
+            <option value="">All PLQY</option>
+            <option value="has">Has Data</option>
+            <option value="no">No Data</option>
+        </select>
+        <select data-column="18">
+            <option value="">All SEM</option>
+            <option value="has">Has Data</option>
+            <option value="no">No Data</option>
+        </select>
+        <select data-column="19">
+            <option value="">All EDX</option>
+            <option value="has">Has Data</option>
+            <option value="no">No Data</option>
+        </select>
+        <select data-column="20">
+            <option value="">All XRD</option>
+            <option value="has">Has Data</option>
+            <option value="no">No Data</option>
+        </select>
+    </div>
+    <div class="filter-actions">
+        <button id="resetFilters" class="btn-reset">Reset Filters</button>
+    </div>
+</div>
+
+<!-- Add a scroll hint -->
+<div class="scroll-hint">
+    <small>← Scroll horizontally to see more columns →</small>
+</div>
+
+<div class="table-container">
+    <table id="dataTable">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Company Name</th>
+                <th>ERB</th>
+                <th>ERB Description</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Recipe Front</th>
+                <th>Recipe Back</th>
+                <th>Glass Type</th>
+                <th>Dimensions (mm)</th>
+                <th>Cleaning</th>
+                <th>Coating</th>
+                <th>Annealing</th>
+                <th>Done</th>
+                <th>Transmittance</th>
+                <th>Reflectance</th>
+                <th>Absorbance</th>
+                <th>PLQY</th>
+                <th>SEM</th>
+                <th>EDX</th>
+                <th>XRD</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sample, experiment in results %}
+            <tr>
+                <td>{{ sample.id }}</td>
+                <td>{{ sample.company_name }}</td>
+                <td>{{ sample.ERB }}</td>
+                <td class="center">
+                    {% if sample.ERB_description %}
+                        <a href="{{ sample.ERB_description }}" target="_blank" class="view-link">View</a>
+                    {% endif %}
+                </td>
+                <td>{{ sample.date }}</td>
+                <td>{{ sample.time }} {{ sample.am_pm }}</td>
+                <td>{{ sample.recipe_front }}</td>
+                <td>{{ sample.recipe_back }}</td>
+                <td>{{ sample.glass_type }}</td>
+                <td>{{ sample.length }}x{{ sample.thickness }}x{{ sample.height }}</td>
+                <td class="center">{{ sample.cleaning }}</td>
+                <td class="center">{{ sample.coating }}</td>
+                <td class="center">{{ sample.annealing }}</td>
+                <td class="center">{{ sample.done }}</td>
+                <td class="center">
+                    {% if experiment and experiment.transmittance %}
+                        <a href="#" onclick="showData('transmittance', {{ experiment.transmittance|tojson }})">View</a>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if experiment and experiment.reflectance %}
+                        <a href="#" onclick="showData('reflectance', {{ experiment.reflectance|tojson }})">View</a>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if experiment and experiment.absorbance %}
+                        <a href="#" onclick="showData('absorbance', {{ experiment.absorbance|tojson }})">View</a>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if experiment and experiment.plqy %}
+                        <a href="#" onclick="showData('plqy', {{ experiment.plqy|tojson }})">View</a>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if experiment and experiment.sem %}
+                        <a href="#" onclick="showData('sem', {{ experiment.sem|tojson }})">View</a>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if experiment and experiment.edx %}
+                        <a href="#" onclick="showData('edx', {{ experiment.edx|tojson }})">View</a>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if experiment and experiment.xrd %}
+                        <a href="#" onclick="showData('xrd', {{ experiment.xrd|tojson }})">View</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Add scroll to top button -->
+<button id="scrollTopBtn" class="scroll-top-btn" title="Go to top">↑</button>
+
+<!-- Add modal for displaying data -->
+<div id="dataModal" class="modal">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2 id="modalTitle"></h2>
+        <div id="modalContent"></div>
+    </div>
+</div>
+
+<script>
+// Add scroll to top functionality
+const scrollTopBtn = document.getElementById('scrollTopBtn');
+
+window.onscroll = function() {
+    if (document.body.scrollTop > 20 || document.documentElement.scrollTop > 20) {
+        scrollTopBtn.style.display = "block";
+    } else {
+        scrollTopBtn.style.display = "none";
+    }
+};
+
+scrollTopBtn.onclick = function() {
+    document.body.scrollTop = 0; // For Safari
+    document.documentElement.scrollTop = 0; // For Chrome, Firefox, IE and Opera
+};
+
+// Add horizontal scroll hint
+const tableContainer = document.querySelector('.table-container');
+const scrollHint = document.querySelector('.scroll-hint');
+
+if (tableContainer.scrollWidth > tableContainer.clientWidth) {
+    scrollHint.style.display = 'block';
+} else {
+    scrollHint.style.display = 'none';
+}
+
+// Hide scroll hint after first scroll
+tableContainer.addEventListener('scroll', function() {
+    scrollHint.style.display = 'none';
+}, { once: true });
+
+// Modal functionality
+const modal = document.getElementById('dataModal');
+const modalTitle = document.getElementById('modalTitle');
+const modalContent = document.getElementById('modalContent');
+const span = document.getElementsByClassName('close')[0];
+
+function showData(type, data) {
+    modalTitle.textContent = type.charAt(0).toUpperCase() + type.slice(1) + ' Data';
+    
+    if (Array.isArray(data)) {
+        // Create a table for numerical data
+        let table = '<table><thead><tr><th>X</th><th>Y</th></tr></thead><tbody>';
+        data.forEach(point => {
+            table += `<tr><td>${point[0]}</td><td>${point[1]}</td></tr>`;
+        });
+        table += '</tbody></table>';
+        modalContent.innerHTML = table;
+    } else {
+        // Display link or text data
+        modalContent.innerHTML = `<p>${data}</p>`;
+    }
+    
+    modal.style.display = 'block';
+}
+
+span.onclick = function() {
+    modal.style.display = 'none';
+}
+
+window.onclick = function(event) {
+    if (event.target == modal) {
+        modal.style.display = 'none';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const table = document.getElementById('dataTable');
+    const filters = document.querySelectorAll('.filter-container .filter-row input, .filter-container .filter-row select');
+    const resetButton = document.getElementById('resetFilters');
+    
+    // Add reset functionality
+    resetButton.addEventListener('click', function() {
+        // Reset all filters
+        filters.forEach(filter => {
+            if (filter.tagName === 'SELECT') {
+                filter.selectedIndex = 0;
+            } else {
+                filter.value = '';
+            }
+        });
+        
+        // Show all rows
+        const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+        for (let row of rows) {
+            row.style.display = '';
+        }
+    });
+
+    filters.forEach(filter => {
+        filter.addEventListener('input', function() {
+            filterTable();
+        });
+    });
+
+    function filterTable() {
+        const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+        
+        for (let row of rows) {
+            let showRow = true;
+            
+            filters.forEach(filter => {
+                const columnIndex = filter.getAttribute('data-column');
+                const filterValue = filter.value.toLowerCase();
+                const cell = row.cells[columnIndex];
+                const cellValue = cell.textContent.toLowerCase();
+
+                if (filterValue) {
+                    if (filter.tagName === 'SELECT') {
+                        if (columnIndex >= 14) { // Data columns
+                            const hasData = cell.querySelector('a') !== null;
+                            if ((filterValue === 'has' && !hasData) || 
+                                (filterValue === 'no' && hasData)) {
+                                showRow = false;
+                            }
+                        } else { // Y/N columns
+                            if (cellValue !== filterValue.toLowerCase()) {
+                                showRow = false;
+                            }
+                        }
+                    } else { // Text input filters
+                        if (!cellValue.includes(filterValue)) {
+                            showRow = false;
+                        }
+                    }
+                }
+            });
+
+            row.style.display = showRow ? '' : 'none';
+        }
+    }
+});
+</script>
+{% endblock %} 

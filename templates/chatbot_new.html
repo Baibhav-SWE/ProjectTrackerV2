@@ -1,0 +1,613 @@
+{% extends "base.html" %}
+
+{% block title %}Chatbot New{% endblock %}
+
+{% block header %}Project Tracker Advanced Chatbot{% endblock %}
+
+{% block content %}
+<div class="chatbot-container">
+    <div class="chat-interface">
+        <div class="chat-header">
+            <h2>Advanced Project Assistant</h2>
+            <div class="chat-info">
+                <i class="fas fa-info-circle"></i>
+                <span>Ask questions in natural language about your samples and experiments</span>
+            </div>
+        </div>
+        
+        <div class="chat-box">
+            <div class="chat-messages" id="chatMessages">
+                <div class="message bot">
+                    <div class="message-content">
+                        <p>👋 Hello! I'm your advanced project assistant. Here are some things you can ask me:</p>
+                        <div class="example-queries">
+                            <div class="query-category">
+                                <h4>🔍 Basic Queries</h4>
+                                <ul>
+                                    <li>"Show all samples from Sun Density"</li>
+                                    <li>"Find experiments with ERB number 1"</li>
+                                    <li>"Display samples with cleaning status Y"</li>
+                                </ul>
+                            </div>
+                            <div class="query-category">
+                                <h4>📊 Advanced Queries</h4>
+                                <ul>
+                                    <li>"Show samples where coating is Y and cleaning is N"</li>
+                                    <li>"Find all experiments with transmittance data from last week"</li>
+                                    <li>"List samples with glass type A and dimensions 10x20x30"</li>
+                                </ul>
+                            </div>
+                            <div class="query-category">
+                                <h4>📋 Column Selection</h4>
+                                <ul>
+                                    <li>"Show id, date, glass type columns"</li>
+                                    <li>"Display ERB, company name, dimensions"</li>
+                                    <li>"List all experimental data columns"</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% if query %}
+                    <div class="message user">
+                        <div class="message-content">{{ query }}</div>
+                    </div>
+                    {% if error %}
+                        <div class="message bot error">
+                            <div class="message-content">{{ error }}</div>
+                        </div>
+                    {% elif response %}
+                        <div class="message bot">
+                            <div class="message-content">{{ response | safe | replace('\n', '<br>') }}</div>
+                        </div>
+                    {% endif %}
+                {% endif %}
+            </div>
+            <form method="POST" class="chat-input-form">
+                <div class="input-group">
+                    <input type="text" name="query" placeholder="Ask me anything about your samples..." required class="chat-input">
+                    <button type="submit" class="chat-submit">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if results %}
+    <div class="results-section">
+        <div class="results-header">
+            <h3>Search Results</h3>
+            <div class="results-controls">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="tableSearch" placeholder="Filter results..." class="table-search">
+                </div>
+                <button id="exportCSV" class="export-btn">
+                    <i class="fas fa-download"></i>
+                    Export to CSV
+                </button>
+            </div>
+        </div>
+        <div class="table-container">
+            <div class="table-wrapper">
+                <table id="resultsTable" class="results-table">
+                    <thead>
+                        <tr>
+                            {% if selected_columns %}
+                                {% for column in selected_columns %}
+                                    <th>{{ column|title|replace('_', ' ') }}</th>
+                                {% endfor %}
+                            {% else %}
+                                <th>ID</th>
+                                <th>Company Name</th>
+                                <th>ERB</th>
+                                <th>ERB Description</th>
+                                <th>Date</th>
+                                <th>Time</th>
+                                <th>Recipe Front</th>
+                                <th>Recipe Back</th>
+                                <th>Glass Type</th>
+                                <th>Dimensions (mm)</th>
+                                <th>Cleaning</th>
+                                <th>Coating</th>
+                                <th>Annealing</th>
+                                <th>Done</th>
+                                <th>Transmittance</th>
+                                <th>Reflectance</th>
+                                <th>Absorbance</th>
+                                <th>PLQY</th>
+                                <th>SEM</th>
+                                <th>EDX</th>
+                                <th>XRD</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sample, experiment in results %}
+                        <tr>
+                            {% if selected_columns %}
+                                {% for column in selected_columns %}
+                                    <td class="center">
+                                        {% if column == 'id' %}
+                                            {{ sample.id }}
+                                        {% elif column == 'company_name' %}
+                                            {{ sample.company_name }}
+                                        {% elif column == 'erb' %}
+                                            {{ sample.ERB }}
+                                        {% elif column == 'erb_description' %}
+                                            {% if sample.ERB_description %}
+                                                <a href="{{ sample.ERB_description }}" target="_blank" class="view-link">View</a>
+                                            {% endif %}
+                                        {% elif column == 'date' %}
+                                            {{ sample.date }}
+                                        {% elif column == 'time' %}
+                                            {{ sample.time }} {{ sample.am_pm }}
+                                        {% elif column == 'recipe_front' %}
+                                            {{ sample.recipe_front }}
+                                        {% elif column == 'recipe_back' %}
+                                            {{ sample.recipe_back }}
+                                        {% elif column == 'glass_type' %}
+                                            {{ sample.glass_type }}
+                                        {% elif column == 'dimensions' %}
+                                            {{ sample.length }}x{{ sample.thickness }}x{{ sample.height }}
+                                        {% elif column == 'cleaning' %}
+                                            <span class="status-cell {% if sample.cleaning == 'Y' %}status-yes{% else %}status-no{% endif %}">{{ sample.cleaning }}</span>
+                                        {% elif column == 'coating' %}
+                                            <span class="status-cell {% if sample.coating == 'Y' %}status-yes{% else %}status-no{% endif %}">{{ sample.coating }}</span>
+                                        {% elif column == 'annealing' %}
+                                            <span class="status-cell {% if sample.annealing == 'Y' %}status-yes{% else %}status-no{% endif %}">{{ sample.annealing }}</span>
+                                        {% elif column == 'done' %}
+                                            <span class="status-cell {% if sample.done == 'Y' %}status-yes{% else %}status-no{% endif %}">{{ sample.done }}</span>
+                                        {% elif column == 'transmittance' and experiment %}
+                                            {% if experiment.transmittance %}
+                                                <a href="{{ experiment.transmittance }}" target="_blank" class="view-link">View</a>
+                                            {% endif %}
+                                        {% elif column == 'reflectance' and experiment %}
+                                            {% if experiment.reflectance %}
+                                                <a href="{{ experiment.reflectance }}" target="_blank" class="view-link">View</a>
+                                            {% endif %}
+                                        {% elif column == 'absorbance' and experiment %}
+                                            {% if experiment.absorbance %}
+                                                <a href="{{ experiment.absorbance }}" target="_blank" class="view-link">View</a>
+                                            {% endif %}
+                                        {% elif column == 'plqy' and experiment %}
+                                            {% if experiment.plqy %}
+                                                <a href="{{ experiment.plqy }}" target="_blank" class="view-link">View</a>
+                                            {% endif %}
+                                        {% elif column == 'sem' and experiment %}
+                                            {% if experiment.sem %}
+                                                <a href="{{ experiment.sem }}" target="_blank" class="view-link">View</a>
+                                            {% endif %}
+                                        {% elif column == 'edx' and experiment %}
+                                            {% if experiment.edx %}
+                                                <a href="{{ experiment.edx }}" target="_blank" class="view-link">View</a>
+                                            {% endif %}
+                                        {% elif column == 'xrd' and experiment %}
+                                            {% if experiment.xrd %}
+                                                <a href="{{ experiment.xrd }}" target="_blank" class="view-link">View</a>
+                                            {% endif %}
+                                        {% endif %}
+                                    </td>
+                                {% endfor %}
+                            {% else %}
+                                <td>{{ sample.id }}</td>
+                                <td>{{ sample.company_name }}</td>
+                                <td>{{ sample.ERB }}</td>
+                                <td class="center">
+                                    {% if sample.ERB_description %}
+                                        <a href="{{ sample.ERB_description }}" target="_blank" class="view-link">View</a>
+                                    {% endif %}
+                                </td>
+                                <td>{{ sample.date }}</td>
+                                <td>{{ sample.time }} {{ sample.am_pm }}</td>
+                                <td>{{ sample.recipe_front }}</td>
+                                <td>{{ sample.recipe_back }}</td>
+                                <td>{{ sample.glass_type }}</td>
+                                <td>{{ sample.length }}x{{ sample.thickness }}x{{ sample.height }}</td>
+                                <td class="center"><span class="status-cell {% if sample.cleaning == 'Y' %}status-yes{% else %}status-no{% endif %}">{{ sample.cleaning }}</span></td>
+                                <td class="center"><span class="status-cell {% if sample.coating == 'Y' %}status-yes{% else %}status-no{% endif %}">{{ sample.coating }}</span></td>
+                                <td class="center"><span class="status-cell {% if sample.annealing == 'Y' %}status-yes{% else %}status-no{% endif %}">{{ sample.annealing }}</span></td>
+                                <td class="center"><span class="status-cell {% if sample.done == 'Y' %}status-yes{% else %}status-no{% endif %}">{{ sample.done }}</span></td>
+                                <td class="center">
+                                    {% if experiment and experiment.transmittance %}
+                                        <a href="{{ experiment.transmittance }}" target="_blank" class="view-link">View</a>
+                                    {% endif %}
+                                </td>
+                                <td class="center">
+                                    {% if experiment and experiment.reflectance %}
+                                        <a href="{{ experiment.reflectance }}" target="_blank" class="view-link">View</a>
+                                    {% endif %}
+                                </td>
+                                <td class="center">
+                                    {% if experiment and experiment.absorbance %}
+                                        <a href="{{ experiment.absorbance }}" target="_blank" class="view-link">View</a>
+                                    {% endif %}
+                                </td>
+                                <td class="center">
+                                    {% if experiment and experiment.plqy %}
+                                        <a href="{{ experiment.plqy }}" target="_blank" class="view-link">View</a>
+                                    {% endif %}
+                                </td>
+                                <td class="center">
+                                    {% if experiment and experiment.sem %}
+                                        <a href="{{ experiment.sem }}" target="_blank" class="view-link">View</a>
+                                    {% endif %}
+                                </td>
+                                <td class="center">
+                                    {% if experiment and experiment.edx %}
+                                        <a href="{{ experiment.edx }}" target="_blank" class="view-link">View</a>
+                                    {% endif %}
+                                </td>
+                                <td class="center">
+                                    {% if experiment and experiment.xrd %}
+                                        <a href="{{ experiment.xrd }}" target="_blank" class="view-link">View</a>
+                                    {% endif %}
+                                </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.chatbot-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.chat-interface {
+    background: #fff;
+    border-radius: 15px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    margin-bottom: 30px;
+    overflow: hidden;
+}
+
+.chat-header {
+    background: #f8f9fa;
+    padding: 20px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.chat-header h2 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 1.5rem;
+}
+
+.chat-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.chat-box {
+    padding: 20px;
+}
+
+.chat-messages {
+    min-height: 300px;
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.message {
+    margin-bottom: 15px;
+    display: flex;
+    flex-direction: column;
+}
+
+.message.user {
+    align-items: flex-end;
+}
+
+.message-content {
+    padding: 12px 16px;
+    border-radius: 15px;
+    max-width: 80%;
+}
+
+.message.bot .message-content {
+    background: #e9ecef;
+    color: #2c3e50;
+}
+
+.message.user .message-content {
+    background: #007bff;
+    color: white;
+}
+
+.message.bot.error .message-content {
+    background: #dc3545;
+    color: white;
+}
+
+.example-queries {
+    margin-top: 15px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+}
+
+.query-category {
+    background: white;
+    padding: 15px;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.query-category h4 {
+    margin: 0 0 10px 0;
+    color: #2c3e50;
+}
+
+.query-category ul {
+    margin: 0;
+    padding-left: 20px;
+    color: #6c757d;
+}
+
+.query-category li {
+    margin-bottom: 5px;
+    font-size: 0.9rem;
+}
+
+.input-group {
+    display: flex;
+    gap: 10px;
+    background: white;
+    padding: 10px;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.chat-input {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    font-size: 1rem;
+}
+
+.chat-submit {
+    padding: 0 20px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.chat-submit:hover {
+    background: #0056b3;
+}
+
+.results-section {
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+}
+
+.results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.results-controls {
+    display: flex;
+    gap: 15px;
+}
+
+.search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-box i {
+    position: absolute;
+    left: 12px;
+    color: #6c757d;
+}
+
+.table-search {
+    padding: 8px 12px 8px 35px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+
+.export-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.export-btn:hover {
+    background: #218838;
+}
+
+.table-container {
+    overflow-x: auto;
+}
+
+.results-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.results-table th,
+.results-table td {
+    padding: 12px;
+    border: 1px solid #dee2e6;
+}
+
+.results-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    text-align: left;
+}
+
+.results-table tr:nth-child(even) {
+    background: #f8f9fa;
+}
+
+.status-cell {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.status-yes {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-no {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.view-link {
+    display: inline-block;
+    padding: 4px 12px;
+    background: #007bff;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    transition: background-color 0.2s;
+}
+
+.view-link:hover {
+    background: #0056b3;
+    text-decoration: none;
+    color: white;
+}
+
+@media (max-width: 768px) {
+    .results-header {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .results-controls {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .search-box,
+    .export-btn {
+        width: 100%;
+    }
+    
+    .table-search {
+        width: 100%;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Table search functionality
+    const searchInput = document.getElementById('tableSearch');
+    const resultsTable = document.getElementById('resultsTable');
+    
+    if (searchInput && resultsTable) {
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const rows = resultsTable.getElementsByTagName('tr');
+            
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                const cells = row.getElementsByTagName('td');
+                let found = false;
+                
+                for (let cell of cells) {
+                    if (cell.textContent.toLowerCase().includes(searchTerm)) {
+                        found = true;
+                        break;
+                    }
+                }
+                
+                row.style.display = found ? '' : 'none';
+            }
+        });
+    }
+    
+    // Export to CSV functionality
+    const exportBtn = document.getElementById('exportCSV');
+    
+    if (exportBtn && resultsTable) {
+        exportBtn.addEventListener('click', function() {
+            const rows = resultsTable.getElementsByTagName('tr');
+            let csv = [];
+            
+            // Get headers
+            const headers = [];
+            const headerCells = rows[0].getElementsByTagName('th');
+            for (let cell of headerCells) {
+                headers.push('"' + cell.textContent.trim() + '"');
+            }
+            csv.push(headers.join(','));
+            
+            // Get data
+            for (let i = 1; i < rows.length; i++) {
+                if (rows[i].style.display !== 'none') {
+                    const cells = rows[i].getElementsByTagName('td');
+                    const row = [];
+                    for (let cell of cells) {
+                        row.push('"' + cell.textContent.trim() + '"');
+                    }
+                    csv.push(row.join(','));
+                }
+            }
+            
+            // Download CSV
+            const csvContent = csv.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'project_data.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    }
+    
+    // Scroll to bottom of chat messages when new message appears
+    const chatMessages = document.getElementById('chatMessages');
+    if (chatMessages) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+});
+</script>
+{% endblock %} 

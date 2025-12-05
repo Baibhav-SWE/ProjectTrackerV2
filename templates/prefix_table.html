@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Prefix Table{% endblock %}
+
+{% block header %}Prefix Lookup Table{% endblock %}
+
+{% block content %}
+<div class="add-button">
+    <a href="{{ url_for('index') }}" class="btn-blue">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M15 8H1M8 15L1 8L8 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Back to Samples
+    </a>
+</div>
+
+<!-- Add flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<div class="prefix-container">
+    <!-- Add new prefix form -->
+    <form method="POST" class="prefix-form">
+        <div class="form-group">
+            <input type="text" name="prefix" placeholder="Enter prefix" required>
+            <input type="text" name="full_form" placeholder="Enter full form" required>
+            <button type="submit" class="btn-green">Add Prefix</button>
+        </div>
+    </form>
+
+    <!-- Prefix table -->
+    <div class="table-container">
+        <table id="prefixTable">
+            <thead>
+                <tr>
+                    <th>Prefix</th>
+                    <th>Full Form</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for prefix in prefixes %}
+                <tr>
+                    <td>{{ prefix.prefix }}</td>
+                    <td>{{ prefix.full_form }}</td>
+                    <td>
+                        <a href="{{ url_for('delete_prefix', prefix=prefix.prefix) }}" 
+                           onclick="return confirm('Are you sure you want to delete this prefix?')"
+                           class="btn-delete">Delete</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

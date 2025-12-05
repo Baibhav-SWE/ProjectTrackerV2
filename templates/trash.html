@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Trash{% endblock %}
+
+{% block header %}Trash{% endblock %}
+
+{% block content %}
+<div class="add-button">
+    <a href="{{ url_for('index') }}" class="btn-blue">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M15 8H1M8 15L1 8L8 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Back to Samples
+    </a>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<div class="table-container">
+    <table id="trashTable">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Recipe Front</th>
+                <th>Recipe Back</th>
+                <th>Glass Type</th>
+                <th>Dimensions (mm)</th>
+                <th>Cleaning</th>
+                <th>Coating</th>
+                <th>Annealing</th>
+                <th>Done</th>
+                <th>Transmittance</th>
+                <th>Reflectance</th>
+                <th>Absorbance</th>
+                <th>PLQY</th>
+                <th>SEM</th>
+                <th>EDX</th>
+                <th>XRD</th>
+                <th>Deleted At</th>
+                <th>Deleted By</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sample_trash, experiment_trash in trash_records %}
+            <tr>
+                <td>{{ sample_trash.id }}</td>
+                <td>{{ sample_trash.date }}</td>
+                <td>{{ sample_trash.time }} {{ sample_trash.am_pm }}</td>
+                <td>{{ sample_trash.recipe_front }}</td>
+                <td>{{ sample_trash.recipe_back }}</td>
+                <td>{{ sample_trash.glass_type }}</td>
+                <td>{{ sample_trash.length }}x{{ sample_trash.thickness }}x{{ sample_trash.height }}</td>
+                <td class="center">{{ sample_trash.cleaning }}</td>
+                <td class="center">{{ sample_trash.coating }}</td>
+                <td class="center">{{ sample_trash.annealing }}</td>
+                <td class="center">{{ sample_trash.done }}</td>
+                <td>{{ experiment_trash.transmittance if experiment_trash else '' }}</td>
+                <td>{{ experiment_trash.reflectance if experiment_trash else '' }}</td>
+                <td>{{ experiment_trash.absorbance if experiment_trash else '' }}</td>
+                <td>{{ experiment_trash.plqy if experiment_trash else '' }}</td>
+                <td>{{ experiment_trash.sem if experiment_trash else '' }}</td>
+                <td>{{ experiment_trash.edx if experiment_trash else '' }}</td>
+                <td>{{ experiment_trash.xrd if experiment_trash else '' }}</td>
+                <td>{{ sample_trash.deleted_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                <td>{{ sample_trash.deleted_by }}</td>
+                <td>
+                    <a href="{{ url_for('restore_from_trash', id=sample_trash.id) }}" 
+                       class="btn-green" 
+                       onclick="return confirm('Are you sure you want to restore this record?')">
+                        Restore
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %} 
