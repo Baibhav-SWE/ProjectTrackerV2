@@ -2003,10 +2003,8 @@ class Plots(db.Model):
     def __repr__(self):
         return f'<Plot {self.sample_id}>'
 
-if __name__ == '__main__':
-    # Get port from Replit environment if available
-    port = int(os.environ.get('PORT', 5111))  # Using port 5000 as default
-    
+# Initialize database and create admin user (runs on import for gunicorn)
+def init_db():
     with app.app_context():
         # Create tables
         db.create_all()
@@ -2021,7 +2019,7 @@ if __name__ == '__main__':
                 # Create fresh admin user
                 admin_user = User(
                     username='admin',
-                    email='admin@example.com',  # Add default admin email
+                    email='admin@example.com',
                     password=generate_password_hash('admin123', method='pbkdf2:sha256'),
                     is_admin=True,
                     is_active=True,
@@ -2043,8 +2041,15 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"Error during user setup: {str(e)}")
             db.session.rollback()
+
+# Always initialize database on startup (works with gunicorn)
+init_db()
+
+if __name__ == '__main__':
+    # Get port from environment or default
+    port = int(os.environ.get('PORT', 5111))
     
-    # Use Replit's host and port
+    # Run development server
     app.run(
         host='0.0.0.0',
         port=port,
