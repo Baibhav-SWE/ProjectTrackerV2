@@ -111,45 +111,61 @@ def init_db():
     if users is None:
         return
     
-    # Create indexes
-    users.create_index('username', unique=True)
-    users.create_index('email', unique=True)
+    # Create indexes (ignore errors if they already exist or have conflicts)
+    try:
+        users.create_index('username', unique=True, sparse=True)
+    except Exception as e:
+        print(f"Note: Could not create username index: {e}")
+    
+    try:
+        users.create_index('email', unique=True, sparse=True)
+    except Exception as e:
+        print(f"Note: Could not create email index: {e}")
     
     samples = get_samples_collection()
-    if samples:
-        samples.create_index('id', unique=True)
+    if samples is not None:
+        try:
+            samples.create_index('id', unique=True, sparse=True)
+        except Exception as e:
+            print(f"Note: Could not create sample id index: {e}")
     
     prefixes = get_prefixes_collection()
-    if prefixes:
-        prefixes.create_index('prefix', unique=True)
+    if prefixes is not None:
+        try:
+            prefixes.create_index('prefix', unique=True, sparse=True)
+        except Exception as e:
+            print(f"Note: Could not create prefix index: {e}")
     
     # Check if admin user exists
-    existing_admin = users.find_one({'username': 'admin'})
-    if not existing_admin:
-        print("No admin user found, creating admin user...")
-        admin_user = {
-            'username': 'admin',
-            'email': 'admin@example.com',
-            'password': generate_password_hash('admin123', method='pbkdf2:sha256'),
-            'is_admin': True,
-            'is_active': True,
-            'created_at': datetime.utcnow(),
-            'last_login': None,
-            'reset_token': None,
-            'reset_token_expiry': None,
-            'notification_preferences': {
-                'email_notifications': True,
-                'system_notifications': True
-            },
-            'dashboard_preferences': {
-                'recent_activity': True,
-                'saved_queries': []
+    try:
+        existing_admin = users.find_one({'username': 'admin'})
+        if not existing_admin:
+            print("No admin user found, creating admin user...")
+            admin_user = {
+                'username': 'admin',
+                'email': 'admin@example.com',
+                'password': generate_password_hash('admin123', method='pbkdf2:sha256'),
+                'is_admin': True,
+                'is_active': True,
+                'created_at': datetime.utcnow(),
+                'last_login': None,
+                'reset_token': None,
+                'reset_token_expiry': None,
+                'notification_preferences': {
+                    'email_notifications': True,
+                    'system_notifications': True
+                },
+                'dashboard_preferences': {
+                    'recent_activity': True,
+                    'saved_queries': []
+                }
             }
-        }
-        users.insert_one(admin_user)
-        print("Created admin user with username: admin, password: admin123")
-    else:
-        print("Admin user already exists")
+            users.insert_one(admin_user)
+            print("Created admin user with username: admin, password: admin123")
+        else:
+            print("Admin user already exists")
+    except Exception as e:
+        print(f"Error during admin user setup: {e}")
 
 # Initialize on startup
 init_db()
