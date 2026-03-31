@@ -975,23 +975,191 @@ def delete_user(user_id):
     flash(f'User {user["username"]} has been deleted', 'success')
     return redirect(url_for('admin_users'))
 
-# Chatbot routes (simplified)
+# Chatbot helpers (MongoDB-backed)
+CHATBOT_COLUMN_ALIASES = {
+    'id': 'id',
+    'sample id': 'id',
+    'company': 'company_name',
+    'company name': 'company_name',
+    'company_name': 'company_name',
+    'erb': 'erb',
+    'erb number': 'erb',
+    'erb description': 'erb_description',
+    'date': 'date',
+    'time': 'time',
+    'recipe front': 'recipe_front',
+    'recipe back': 'recipe_back',
+    'glass': 'glass_type',
+    'glass type': 'glass_type',
+    'dimensions': 'dimensions',
+    'dimension': 'dimensions',
+    'cleaning': 'cleaning',
+    'coating': 'coating',
+    'annealing': 'annealing',
+    'done': 'done',
+    'transmittance': 'transmittance',
+    'reflectance': 'reflectance',
+    'absorbance': 'absorbance',
+    'plqy': 'plqy',
+    'sem': 'sem',
+    'edx': 'edx',
+    'xrd': 'xrd'
+}
+
+
+def normalize_status_value(raw_value):
+    normalized = str(raw_value).strip().lower()
+    if normalized in {'y', 'yes', 'true', '1'}:
+        return 'Y'
+    if normalized in {'n', 'no', 'false', '0'}:
+        return 'N'
+    return None
+
+
+def parse_selected_columns(query):
+    lowered = query.lower()
+    selected_columns = []
+
+    column_match = re.search(r'(?:show|display|list)\s+(.+?)\s+columns?', lowered)
+    if column_match:
+        chunk = column_match.group(1)
+        chunk = chunk.replace(' and ', ',')
+        for part in [p.strip() for p in chunk.split(',') if p.strip()]:
+            mapped = CHATBOT_COLUMN_ALIASES.get(part)
+            if mapped and mapped not in selected_columns:
+                selected_columns.append(mapped)
+
+    return selected_columns or None
+
+
+def parse_chatbot_filters(query):
+    filters = {}
+    match_notes = []
+
+    id_match = re.search(r"\bid\s*(?:=|is)?\s*['\"]?([a-zA-Z0-9\-]+)['\"]?", query, re.IGNORECASE)
+    if id_match:
+        sample_id = id_match.group(1).strip()
+        filters['id'] = {'$regex': f'^{re.escape(sample_id)}$', '$options': 'i'}
+        match_notes.append(f"id={sample_id}")
+
+    erb_match = re.search(r"\berb(?:\s*number)?\s*(?:=|is)?\s*['\"]?([a-zA-Z0-9\-]+)['\"]?", query, re.IGNORECASE)
+    if erb_match:
+        erb_value = erb_match.group(1).strip()
+        filters['ERB'] = {'$regex': f'^{re.escape(erb_value)}$', '$options': 'i'}
+        match_notes.append(f"ERB={erb_value}")
+
+    company_match = re.search(r"\bfrom\s+([a-zA-Z0-9 _\-&]+?)(?:\s+(?:where|with|and)\b|$)", query, re.IGNORECASE)
+    if not company_match:
+        company_match = re.search(r"\bcompany(?:\s*name)?\s*(?:=|is)\s*['\"]?([a-zA-Z0-9 _\-&]+?)['\"]?(?:\s|$)", query, re.IGNORECASE)
+    if company_match:
+        company_name = company_match.group(1).strip()
+        if company_name:
+            filters['company_name'] = {'$regex': re.escape(company_name), '$options': 'i'}
+            match_notes.append(f"company={company_name}")
+
+    for field in ['cleaning', 'coating', 'annealing', 'done']:
+        status_match = re.search(rf"\b{field}\s*(?:=|is)?\s*['\"]?([a-zA-Z]+)['\"]?", query, re.IGNORECASE)
+        if status_match:
+            normalized = normalize_status_value(status_match.group(1))
+            if normalized:
+                filters[field] = normalized
+                match_notes.append(f"{field}={normalized}")
+
+    return filters, match_notes
+
+
+def run_chatbot_query(query):
+    samples = get_samples_collection()
+    experiments = get_experiments_collection()
+
+    if samples is None:
+        return None, None, None, 'Database not connected. Please check your MongoDB configuration.'
+
+    selected_columns = parse_selected_columns(query)
+    sample_filters, applied_filters = parse_chatbot_filters(query)
+    sample_docs = list(samples.find(sample_filters).sort([('company_name', 1), ('id', 1)]).limit(200))
+
+    if not sample_docs:
+        return [], selected_columns, query, 'No matching records found for this query.'
+
+    experiment_map = {}
+    if experiments is not None:
+        sample_ids = [doc.get('id') for doc in sample_docs if doc.get('id')]
+        for exp_doc in experiments.find({'sample_id': {'$in': sample_ids}}):
+            experiment_map[exp_doc.get('sample_id')] = exp_doc
+
+    results = [(sample_doc, experiment_map.get(sample_doc.get('id'))) for sample_doc in sample_docs]
+
+    response_prefix = f"Found {len(results)} record(s)"
+    if applied_filters:
+        response_prefix += f" using filters: {', '.join(applied_filters)}."
+    else:
+        response_prefix += "."
+
+    if selected_columns:
+        response_prefix += f" Showing selected columns: {', '.join(selected_columns)}."
+
+    return results, selected_columns, response_prefix, None
+
+
 @app.route('/chatbot', methods=['GET', 'POST'])
 @login_required
 def chatbot():
-    return render_template('chatbot.html', results=None, query=None, error=None, response="Chatbot feature coming soon with MongoDB.", selected_columns=None)
+    if request.method == 'POST':
+        query = request.form.get('query', '').strip()
+        if not query:
+            return render_template(
+                'chatbot.html',
+                results=None,
+                query=query,
+                error='Please enter a query.',
+                response=None,
+                selected_columns=None
+            )
+
+        results, selected_columns, response, error = run_chatbot_query(query)
+        return render_template(
+            'chatbot.html',
+            results=results,
+            query=query,
+            error=error,
+            response=response,
+            selected_columns=selected_columns
+        )
+
+    return render_template('chatbot.html', results=None, query=None, error=None, response=None, selected_columns=None)
 
 @app.route('/chatbot_new', methods=['GET', 'POST'])
 @login_required
 def chatbot_new():
-    return render_template('chatbot_new.html', results=None, query=None, error=None, response="Chatbot feature coming soon with MongoDB.", selected_columns=None)
+    if request.method == 'POST':
+        query = request.form.get('query', '').strip()
+        if not query:
+            return render_template(
+                'chatbot_new.html',
+                results=None,
+                query=query,
+                error='Please enter a query.',
+                response=None,
+                selected_columns=None
+            )
+
+        results, selected_columns, response, error = run_chatbot_query(query)
+        return render_template(
+            'chatbot_new.html',
+            results=results,
+            query=query,
+            error=error,
+            response=response,
+            selected_columns=selected_columns
+        )
+
+    return render_template('chatbot_new.html', results=None, query=None, error=None, response=None, selected_columns=None)
 
 @app.route('/chatbot_llm', methods=['GET', 'POST'])
 @login_required
 def chatbot_llm():
-    if openai_client is None:
-        flash('LLM Chatbot is not available. OpenAI API key is not configured.', 'error')
-    return render_template('chatbot_llm.html')
+    return redirect(url_for('chatbot_new'))
 
 @app.route('/compare', methods=['GET', 'POST'])
 @login_required
