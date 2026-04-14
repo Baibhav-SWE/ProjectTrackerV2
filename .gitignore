@@ -3,6 +3,7 @@ __pycache__/
 .env
 instance/
 venv/
-*.db .DS_Store
+*.db
+.DS_Store
 node_modules/
 venv/

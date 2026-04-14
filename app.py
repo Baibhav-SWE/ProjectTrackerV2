@@ -10,11 +10,13 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 import json
+import html
 import numpy as np
 import re
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 from pymongo import MongoClient
+from pymongo.errors import OperationFailure
 from bson import ObjectId
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail as SendGridMail, Email, To, Content
@@ -82,6 +84,70 @@ def get_trash_collection():
 def get_plots_collection():
     return mongo_db['plots'] if mongo_db is not None else None
 
+
+def get_compare_pre_post_collections():
+    """Return (`pre_data`, `post_data`) collection handles on the same cluster.
+
+    Order: ``MONGODB_COMPARE_DB`` if set → database from ``MONGODB_URI`` → then
+    ``AWI_users`` if those collections have documents (common Atlas layout).
+
+    If your URI points at e.g. ``project_tracker`` but pre/post live under
+    ``AWI_users``, either set ``MONGODB_COMPARE_DB=AWI_users`` or rely on the
+    automatic fallback when the URI database has no rows in those collections.
+    """
+    if mongo_client is None:
+        return None, None
+
+    override = os.getenv('MONGODB_COMPARE_DB', '').strip()
+
+    def cols(db):
+        if db is None:
+            return None, None
+        return db['pre_data'], db['post_data']
+
+    def either_has_docs(pre, post):
+        try:
+            return pre.find_one({}) is not None or post.find_one({}) is not None
+        except Exception:
+            return False
+
+    candidates = []
+    if override:
+        candidates.append(mongo_client[override])
+    if mongo_db is not None:
+        candidates.append(mongo_db)
+    for fb in ('AWI_users',):
+        candidates.append(mongo_client[fb])
+
+    seen = set()
+    ordered_dbs = []
+    for db in candidates:
+        if db is None:
+            continue
+        n = db.name
+        if n in seen:
+            continue
+        seen.add(n)
+        ordered_dbs.append(db)
+
+    for db in ordered_dbs:
+        pre, post = cols(db)
+        if pre is None or post is None:
+            continue
+        if either_has_docs(pre, post):
+            if mongo_db is not None and db.name != mongo_db.name and not override:
+                print(
+                    f"Compare tab: using database {db.name!r} for pre_data/post_data "
+                    f"(URI default is {mongo_db.name!r}). Set MONGODB_COMPARE_DB={db.name} in .env."
+                )
+            return pre, post
+
+    db = mongo_client[override] if override else mongo_db
+    if db is None:
+        return None, None
+    return db['pre_data'], db['post_data']
+
+
 # Admin required decorator
 def admin_required(f):
     @wraps(f)
@@ -101,6 +167,21 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# MongoDB index already present but with different options (e.g. sparse vs not) — safe to skip
+_INDEX_CONFLICT_CODES = frozenset({85, 86})  # IndexOptionsConflict, IndexKeySpecsConflict
+
+
+def _try_create_index(collection, keys, **kwargs):
+    try:
+        collection.create_index(keys, **kwargs)
+    except OperationFailure as e:
+        if e.code in _INDEX_CONFLICT_CODES:
+            return
+        print(f"Note: Could not create index {keys!r}: {e}")
+    except Exception as e:
+        print(f"Note: Could not create index {keys!r}: {e}")
+
+
 # Initialize database with admin user
 def init_db():
     if mongo_db is None:
@@ -111,30 +192,16 @@ def init_db():
     if users is None:
         return
     
-    # Create indexes (ignore errors if they already exist or have conflicts)
-    try:
-        users.create_index('username', unique=True, sparse=True)
-    except Exception as e:
-        print(f"Note: Could not create username index: {e}")
-    
-    try:
-        users.create_index('email', unique=True, sparse=True)
-    except Exception as e:
-        print(f"Note: Could not create email index: {e}")
+    _try_create_index(users, 'username', unique=True, sparse=True)
+    _try_create_index(users, 'email', unique=True, sparse=True)
     
     samples = get_samples_collection()
     if samples is not None:
-        try:
-            samples.create_index('id', unique=True, sparse=True)
-        except Exception as e:
-            print(f"Note: Could not create sample id index: {e}")
+        _try_create_index(samples, 'id', unique=True, sparse=True)
     
     prefixes = get_prefixes_collection()
     if prefixes is not None:
-        try:
-            prefixes.create_index('prefix', unique=True, sparse=True)
-        except Exception as e:
-            print(f"Note: Could not create prefix index: {e}")
+        _try_create_index(prefixes, 'prefix', unique=True, sparse=True)
     
     # Check if admin user exists
     try:
@@ -174,15 +241,23 @@ init_db()
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        login_id = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
         
         users = get_users_collection()
         if users is None:
             flash('Database not connected', 'error')
             return redirect(url_for('login'))
         
-        user = users.find_one({'username': username})
+        if not login_id:
+            flash('Please enter your username or email.', 'error')
+            return redirect(url_for('login'))
+        
+        user = users.find_one({'$or': [{'username': login_id}, {'email': login_id}]})
+        if not user and '@' in login_id:
+            user = users.find_one(
+                {'email': {'$regex': f'^{re.escape(login_id)}$', '$options': 'i'}}
+            )
         
         if user and check_password_hash(user['password'], password):
             if not user.get('is_active', True):
@@ -198,7 +273,7 @@ def login():
             
             return redirect(url_for('index'))
         else:
-            flash('Invalid username or password', 'error')
+            flash('Invalid username/email or password', 'error')
     
     return render_template('login.html')
 
@@ -896,6 +971,18 @@ def reset_admin():
         return f'Error: {str(e)}'
 
 # Admin routes
+def _user_display_name(user):
+    return user.get('username') or user.get('email') or str(user.get('_id', 'user'))
+
+
+def _get_user_by_id(users, user_id):
+    try:
+        oid = ObjectId(user_id)
+    except Exception:
+        return None
+    return users.find_one({'_id': oid})
+
+
 @app.route('/admin/users')
 @login_required
 @admin_required
@@ -916,7 +1003,7 @@ def toggle_admin_status(user_id):
         flash('Database not connected', 'error')
         return redirect(url_for('admin_users'))
     
-    user = users.find_one({'_id': ObjectId(user_id)})
+    user = _get_user_by_id(users, user_id)
     if not user:
         flash('User not found', 'error')
         return redirect(url_for('admin_users'))
@@ -927,7 +1014,7 @@ def toggle_admin_status(user_id):
     
     new_status = not user.get('is_admin', False)
     users.update_one({'_id': user['_id']}, {'$set': {'is_admin': new_status}})
-    flash(f'Admin status {"granted" if new_status else "revoked"} for {user["username"]}', 'success')
+    flash(f'Admin status {"granted" if new_status else "revoked"} for {_user_display_name(user)}', 'success')
     return redirect(url_for('admin_users'))
 
 @app.route('/admin/users/<string:user_id>/toggle_active', methods=['POST'])
@@ -939,7 +1026,7 @@ def toggle_user_active(user_id):
         flash('Database not connected', 'error')
         return redirect(url_for('admin_users'))
     
-    user = users.find_one({'_id': ObjectId(user_id)})
+    user = _get_user_by_id(users, user_id)
     if not user:
         flash('User not found', 'error')
         return redirect(url_for('admin_users'))
@@ -950,7 +1037,7 @@ def toggle_user_active(user_id):
     
     new_status = not user.get('is_active', True)
     users.update_one({'_id': user['_id']}, {'$set': {'is_active': new_status}})
-    flash(f'User {user["username"]} has been {"activated" if new_status else "deactivated"}', 'success')
+    flash(f'User {_user_display_name(user)} has been {"activated" if new_status else "deactivated"}', 'success')
     return redirect(url_for('admin_users'))
 
 @app.route('/admin/users/<string:user_id>/delete', methods=['POST'])
@@ -962,7 +1049,7 @@ def delete_user(user_id):
         flash('Database not connected', 'error')
         return redirect(url_for('admin_users'))
     
-    user = users.find_one({'_id': ObjectId(user_id)})
+    user = _get_user_by_id(users, user_id)
     if not user:
         flash('User not found', 'error')
         return redirect(url_for('admin_users'))
@@ -972,7 +1059,7 @@ def delete_user(user_id):
         return redirect(url_for('admin_users'))
     
     users.delete_one({'_id': user['_id']})
-    flash(f'User {user["username"]} has been deleted', 'success')
+    flash(f'User {_user_display_name(user)} has been deleted', 'success')
     return redirect(url_for('admin_users'))
 
 # Chatbot helpers (MongoDB-backed)
@@ -1161,37 +1248,448 @@ def chatbot_new():
 def chatbot_llm():
     return redirect(url_for('chatbot_new'))
 
+def _pre_post_entry_label(doc):
+    if not doc:
+        return 'Unnamed'
+    for key in ('design_name', 'name', 'title', 'filename', 'file_name'):
+        v = doc.get(key)
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    oid = doc.get('_id')
+    return str(oid) if oid is not None else 'Unnamed'
+
+
+def _coerce_pair_lists(x, y):
+    if x is None or y is None:
+        return [], []
+    try:
+        xa = [float(v) for v in x]
+        ya = [float(v) for v in y]
+    except (TypeError, ValueError):
+        return [], []
+    if len(xa) != len(ya) or not xa:
+        return [], []
+    return xa, ya
+
+
+def _xy_from_raw(raw):
+    """Build x,y lists from JSON string, [[wl,val],...], {wavelength,values}, or list of dicts."""
+    if raw is None:
+        return [], []
+    if isinstance(raw, str):
+        s = raw.strip()
+        if not s:
+            return [], []
+        try:
+            return _xy_from_raw(json.loads(s))
+        except json.JSONDecodeError:
+            return [], []
+    if isinstance(raw, dict):
+        for kx, ky in (
+            ('wavelength', 'value'),
+            ('wavelength', 'values'),
+            ('x', 'y'),
+            ('X', 'Y'),
+            ('lambda', 'y'),
+        ):
+            if kx in raw and ky in raw:
+                return _coerce_pair_lists(raw[kx], raw[ky])
+        return [], []
+    if isinstance(raw, (list, tuple)):
+        if not raw:
+            return [], []
+        first = raw[0]
+        if isinstance(first, (list, tuple)) and len(first) >= 2:
+            try:
+                return [float(p[0]) for p in raw], [float(p[1]) for p in raw]
+            except (TypeError, ValueError, IndexError):
+                return [], []
+        if isinstance(first, dict):
+            xs, ys = [], []
+            for p in raw:
+                if not isinstance(p, dict):
+                    continue
+                xv = p.get('wavelength') or p.get('x') or p.get('X') or p.get('lambda')
+                yv = p.get('value') or p.get('y') or p.get('Y') or p.get('values')
+                if xv is None or yv is None:
+                    continue
+                try:
+                    xs.append(float(xv))
+                    ys.append(float(yv))
+                except (TypeError, ValueError):
+                    continue
+            return (xs, ys) if xs else ([], [])
+    return [], []
+
+
+def _series_from_doc(doc, *keys):
+    """Read series from top-level fields or from nested ``data`` (Atlas pre_data/post_data)."""
+    sources = [doc]
+    nested = doc.get('data')
+    if isinstance(nested, dict):
+        sources.append(nested)
+    for src in sources:
+        for k in keys:
+            if k not in src:
+                continue
+            val = src[k]
+            if val in (None, '', []):
+                continue
+            x, y = _xy_from_raw(val)
+            if x:
+                return x, y
+    return [], []
+
+
+def _spectra_from_wavelength_tra_map(d):
+    """Parse ``{\"380\": [T, R, A], ...}`` — key = wavelength (nm), value[0]=T, [1]=R, [2]=A."""
+    if not isinstance(d, dict):
+        return None
+    skip = frozenset({
+        'transmittance', 'reflectance', 'absorbance', 'design_name', 'name', 'title',
+        '_id', 'filename', 'file_name', 'data', 'created_at', 'updated_at', 'id',
+    })
+    points = []
+    for k, v in d.items():
+        if k in skip:
+            continue
+        try:
+            wl = float(k)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(v, (list, tuple)) or len(v) < 3:
+            continue
+        try:
+            t, r, a = float(v[0]), float(v[1]), float(v[2])
+        except (TypeError, ValueError, IndexError):
+            continue
+        points.append((wl, t, r, a))
+    if not points:
+        return None
+    points.sort(key=lambda p: p[0])
+    xs = [p[0] for p in points]
+    return (
+        (xs, [p[1] for p in points]),
+        (xs, [p[2] for p in points]),
+        (xs, [p[3] for p in points]),
+    )
+
+
+def _tra_series_from_doc(doc):
+    """If ``data`` (or root) is a wavelength → [T,R,A] map, return three (x,y) series."""
+    for src in (doc.get('data'), doc):
+        if not isinstance(src, dict):
+            continue
+        triple = _spectra_from_wavelength_tra_map(src)
+        if triple:
+            return triple
+    return None
+
+
+def _resolve_tra_series(doc):
+    """Three (x,y) pairs for T, R, A from either wavelength map or legacy fields."""
+    triple = _tra_series_from_doc(doc)
+    if triple:
+        return triple[0], triple[1], triple[2]
+    return (
+        _series_from_doc(doc, *_T_KEYS),
+        _series_from_doc(doc, *_R_KEYS),
+        _series_from_doc(doc, *_A_KEYS),
+    )
+
+
+def _avg_optical_band(x, y, lo=400.0, hi=1200.0):
+    vals = []
+    for xi, yi in zip(x, y):
+        try:
+            xf, yf = float(xi), float(yi)
+        except (TypeError, ValueError):
+            continue
+        if lo <= xf <= hi and yf > 0 and yf == yf:
+            vals.append(yf)
+    return sum(vals) / len(vals) if vals else 0.0
+
+
+def _pct_gain(pre_v, post_v):
+    if pre_v and pre_v > 0:
+        return ((post_v - pre_v) / pre_v) * 100.0
+    return 0.0
+
+
+def _dual_trace_plot_json(x1, y1, x2, y2, title, yaxis_title, name_a='Pre', name_b='Post'):
+    fig = go.Figure()
+    if x1 and y1:
+        fig.add_trace(go.Scatter(x=x1, y=y1, mode='lines', name=name_a))
+    if x2 and y2:
+        fig.add_trace(go.Scatter(x=x2, y=y2, mode='lines', name=name_b))
+    fig.update_layout(
+        title=title,
+        xaxis_title='Wavelength (nm)',
+        yaxis_title=yaxis_title,
+        template='plotly_white',
+        height=420,
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
+    )
+    return json.dumps(fig.to_plotly_json())
+
+
+def _combined_compare_plot_json(
+    pre_t, pre_r, pre_a, post_t, post_r, post_a,
+    pre_label, post_label,
+    pre_avg_t, post_avg_t, pre_avg_r, post_avg_r, pre_avg_a, post_avg_a,
+    gain_t, gain_r, gain_a,
+):
+    """Single figure matching View Plots: all T/R/A pre+post series, shared axes, stats annotation."""
+    colors = ['#0066FF', '#FF3333', '#33CC33', '#FFD700', '#9933FF', '#FF8000']
+    pl = html.escape(str(pre_label))
+    ql = html.escape(str(post_label))
+    stats_html = (
+        f'<b>Pre ({pl}):</b> '
+        f'T: {pre_avg_t:.2f}% | R: {pre_avg_r:.2f}% | A: {pre_avg_a:.3f}<br>'
+        f'<b>Post ({ql}):</b> '
+        f'T: {post_avg_t:.2f}% | R: {post_avg_r:.2f}% | A: {post_avg_a:.3f}<br>'
+        f'<b>Gains:</b> T: {gain_t:+.2f}% | R: {gain_r:+.2f}% | A: {gain_a:+.2f}%'
+    )
+
+    series_specs = [
+        (pre_t, f'Transmittance ({pre_label})', colors[0]),
+        (post_t, f'Transmittance ({post_label})', colors[1]),
+        (pre_r, f'Reflectance ({pre_label})', colors[2]),
+        (post_r, f'Reflectance ({post_label})', colors[3]),
+        (pre_a, f'Absorbance ({pre_label})', colors[4]),
+        (post_a, f'Absorbance ({post_label})', colors[5]),
+    ]
+
+    fig = go.Figure()
+    for (xs, ys), name, color in series_specs:
+        if not xs or not ys:
+            continue
+        fig.add_trace(
+            go.Scatter(
+                x=xs,
+                y=ys,
+                mode='lines',
+                type='scatter',
+                name=name,
+                line=dict(color=color, width=3, shape='spline', smoothing=1.2),
+                hovertemplate=(
+                    '<b>%{fullData.name}</b><br>Wavelength: %{x:.0f} nm<br>'
+                    'Value: %{y:.4f}<br><extra></extra>'
+                ),
+            )
+        )
+
+    fig.update_layout(
+        title=dict(
+            text='TRA vs Wavelength',
+            font=dict(size=20, color='#333'),
+            x=0.5,
+            y=0.98,
+        ),
+        xaxis=dict(
+            title=dict(text='Wavelength (nm)', font=dict(size=14, color='#333'), standoff=20),
+            showgrid=True,
+            gridcolor='#E5E5E5',
+            gridwidth=1,
+            zeroline=False,
+            tickfont=dict(size=12, color='#333'),
+            range=[300, 1000],
+        ),
+        yaxis=dict(
+            title=dict(text='TRA (%)', font=dict(size=14, color='#333'), standoff=20),
+            showgrid=True,
+            gridcolor='#E5E5E5',
+            gridwidth=1,
+            zeroline=True,
+            zerolinecolor='#E5E5E5',
+            tickfont=dict(size=12, color='#333'),
+            range=[-25, 100],
+            dtick=25,
+        ),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        height=1100,
+        margin=dict(l=80, r=80, t=60, b=280),
+        showlegend=True,
+        legend=dict(
+            x=0.98,
+            y=1,
+            xanchor='right',
+            yanchor='top',
+            bgcolor='rgba(255, 255, 255, 0.9)',
+            bordercolor='white',
+            font=dict(size=12, color='#333'),
+            itemwidth=30,
+            itemsizing='constant',
+        ),
+        annotations=[
+            dict(
+                xref='paper',
+                yref='paper',
+                x=0.5,
+                y=-0.14,
+                xanchor='center',
+                yanchor='top',
+                text=f'<b style="font-size: 16px; color: #333;">Statistics Summary</b><br>{stats_html}',
+                showarrow=False,
+                font=dict(family='monospace', size=13, color='#333'),
+                align='center',
+                bgcolor='white',
+                bordercolor='#333',
+                borderwidth=1,
+                borderpad=10,
+                width=820,
+            )
+        ],
+        hovermode='closest',
+        hoverdistance=10,
+    )
+    return json.dumps(fig.to_plotly_json())
+
+
+_T_KEYS = (
+    'transmittance', 'Transmittance', 'TRA', 'tra', 'T', 't',
+    'pre_transmittance', 'post_transmittance',
+)
+_R_KEYS = (
+    'reflectance', 'Reflectance', 'R', 'r',
+    'pre_reflectance', 'post_reflectance',
+)
+_A_KEYS = (
+    'absorbance', 'Absorbance', 'A', 'a',
+    'pre_absorbance', 'post_absorbance',
+)
+
+
 @app.route('/compare', methods=['GET', 'POST'])
 @login_required
 def compare():
+    def render_compare(pre_files, post_files, **extra):
+        ctx = {
+            'pre_data_files': pre_files,
+            'post_data_files': post_files,
+            'show_selection': True,
+            'error': extra.pop('error', False),
+            'selected_pre_file': extra.pop('selected_pre_file', None),
+            'selected_post_file': extra.pop('selected_post_file', None),
+        }
+        ctx.update(extra)
+        return render_template('compare.html', **ctx)
+
+    label_projection = {
+        'design_name': 1, 'name': 1, 'title': 1, 'filename': 1, 'file_name': 1,
+    }
+
     try:
-        if mongo_db is None:
-            raise Exception("MongoDB connection is not available")
-            
-        pre_data_files = list(mongo_db.pre_data.find({}, {'design_name': 1}))
-        post_data_files = list(mongo_db.post_data.find({}, {'design_name': 1}))
-        
-        for doc in pre_data_files + post_data_files:
-            doc['_id'] = str(doc['_id'])
+        if mongo_client is None:
+            flash('MongoDB is not connected.', 'error')
+            return render_compare([], [], error=False)
 
-        if request.method == 'GET' or not (request.form.get('pre_file_id') and request.form.get('post_file_id')):
-            return render_template('compare.html',
-                                pre_data_files=pre_data_files,
-                                post_data_files=post_data_files,
-                                show_selection=True)
+        pre_col, post_col = get_compare_pre_post_collections()
+        if pre_col is None or post_col is None:
+            flash('Could not open pre_data / post_data collections.', 'error')
+            return render_compare([], [], error=False)
 
-        # Rest of compare logic...
-        return render_template('compare.html',
-            pre_data_files=pre_data_files,
-            post_data_files=post_data_files,
-            show_selection=True,
-            error=False
+        pre_data_files = [
+            {'_id': str(d['_id']), 'label': _pre_post_entry_label(d)}
+            for d in pre_col.find({}, label_projection)
+        ]
+        post_data_files = [
+            {'_id': str(d['_id']), 'label': _pre_post_entry_label(d)}
+            for d in post_col.find({}, label_projection)
+        ]
+
+        selected_pre = request.form.get('pre_file_id') if request.method == 'POST' else None
+        selected_post = request.form.get('post_file_id') if request.method == 'POST' else None
+
+        if request.method == 'GET' or not (selected_pre and selected_post):
+            return render_compare(
+                pre_data_files, post_data_files,
+                selected_pre_file=selected_pre, selected_post_file=selected_post,
+            )
+
+        if selected_pre == selected_post:
+            flash('Choose different documents for pre and post.', 'error')
+            return render_compare(
+                pre_data_files, post_data_files,
+                selected_pre_file=selected_pre, selected_post_file=selected_post,
+            )
+
+        try:
+            oid_pre = ObjectId(selected_pre)
+            oid_post = ObjectId(selected_post)
+        except Exception:
+            flash('Invalid document id.', 'error')
+            return render_compare(
+                pre_data_files, post_data_files,
+                selected_pre_file=selected_pre, selected_post_file=selected_post,
+            )
+
+        pre_doc = pre_col.find_one({'_id': oid_pre})
+        post_doc = post_col.find_one({'_id': oid_post})
+        if not pre_doc or not post_doc:
+            flash('Pre or post document was not found.', 'error')
+            return render_compare(
+                pre_data_files, post_data_files,
+                selected_pre_file=selected_pre, selected_post_file=selected_post,
+            )
+
+        pre_label = _pre_post_entry_label(pre_doc)
+        post_label = _pre_post_entry_label(post_doc)
+
+        pre_t, pre_r, pre_a = _resolve_tra_series(pre_doc)
+        post_t, post_r, post_a = _resolve_tra_series(post_doc)
+
+        if not (pre_t[0] or post_t[0] or pre_r[0] or post_r[0] or pre_a[0] or post_a[0]):
+            flash(
+                'No transmittance, reflectance, or absorbance data found. '
+                'Expected a data object mapping wavelength to [T,R,A] (e.g. "380": [T,R,A]) '
+                'or separate transmittance / reflectance / absorbance fields.',
+                'error',
+            )
+            return render_compare(
+                pre_data_files, post_data_files,
+                selected_pre_file=selected_pre, selected_post_file=selected_post,
+            )
+
+        pre_avg_transmittance = _avg_optical_band(pre_t[0], pre_t[1])
+        post_avg_transmittance = _avg_optical_band(post_t[0], post_t[1])
+        pre_avg_reflectance = _avg_optical_band(pre_r[0], pre_r[1])
+        post_avg_reflectance = _avg_optical_band(post_r[0], post_r[1])
+        pre_avg_absorbance = _avg_optical_band(pre_a[0], pre_a[1])
+        post_avg_absorbance = _avg_optical_band(post_a[0], post_a[1])
+        tg = _pct_gain(pre_avg_transmittance, post_avg_transmittance)
+        rg = _pct_gain(pre_avg_reflectance, post_avg_reflectance)
+        ag = _pct_gain(pre_avg_absorbance, post_avg_absorbance)
+
+        combined_compare_plot = _combined_compare_plot_json(
+            pre_t, pre_r, pre_a, post_t, post_r, post_a,
+            pre_label, post_label,
+            pre_avg_transmittance, post_avg_transmittance,
+            pre_avg_reflectance, post_avg_reflectance,
+            pre_avg_absorbance, post_avg_absorbance,
+            tg, rg, ag,
         )
-            
+
+        return render_compare(
+            pre_data_files, post_data_files,
+            selected_pre_file=selected_pre, selected_post_file=selected_post,
+            combined_compare_plot=combined_compare_plot,
+            pre_avg_transmittance=pre_avg_transmittance,
+            post_avg_transmittance=post_avg_transmittance,
+            pre_avg_reflectance=pre_avg_reflectance,
+            post_avg_reflectance=post_avg_reflectance,
+            pre_avg_absorbance=pre_avg_absorbance,
+            post_avg_absorbance=post_avg_absorbance,
+            transmittance_gain=tg,
+            reflectance_gain=rg,
+            absorbance_gain=ag,
+        )
+
     except Exception as e:
         print(f"Unexpected error in compare route: {str(e)}")
         flash(f"An unexpected error occurred: {str(e)}", 'error')
-        return render_template('compare.html', error=True)
+        return render_compare([], [], error=True)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5111))

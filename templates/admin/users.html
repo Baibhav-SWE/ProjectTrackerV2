@@ -3,7 +3,8 @@
 {% block title %}User Management{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+{# content already wrapped in .container from base.html #}
+<div class="admin-users-page">
     <div class="row mb-4">
         <div class="col">
             <h2 class="text-primary">User Management</h2>
@@ -11,23 +12,10 @@
         </div>
     </div>
 
-    <!-- Flash Messages -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-
-    <!-- User Management Table -->
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <div class="user-table-scroll" style="max-height: 420px; overflow-y: auto; overflow-x: auto; width: 100%;">
-                <table class="table table-hover align-middle mb-0 user-table-fixed" style="min-width: 1200px; border: 1px solid #dee2e6;">
+    <div class="card shadow-sm admin-users-card">
+        <div class="card-body p-0">
+            <div class="user-table-scroll">
+                <table class="table table-hover align-middle mb-0 user-table-fixed">
                     <thead class="table-light">
                         <tr>
                             <th>Username</th>
@@ -40,17 +28,22 @@
                     </thead>
                     <tbody>
                         {% for user in users %}
+                        {% set uid = user['_id']|string %}
+                        {% set is_active = user.get('is_active', true) %}
+                        {% set is_admin = user.get('is_admin', false) %}
+                        {% set uname = user.get('username') %}
+                        {% set uemail = user.get('email') %}
                         <tr>
-                            <td>{{ user.username }}</td>
-                            <td>{{ user.email }}</td>
+                            <td>{% if uname %}{{ uname }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                            <td>{% if uemail %}{{ uemail }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
                             <td>
-                                <span class="badge {% if user.is_active %}bg-success{% else %}bg-danger{% endif %}">
-                                    {{ 'Active' if user.is_active else 'Inactive' }}
+                                <span class="badge {% if is_active %}badge-success{% else %}badge-danger{% endif %}">
+                                    {{ 'Active' if is_active else 'Inactive' }}
                                 </span>
                             </td>
                             <td>
-                                <span class="badge {% if user.is_admin %}bg-primary{% else %}bg-secondary{% endif %}">
-                                    {{ 'Admin' if user.is_admin else 'User' }}
+                                <span class="badge {% if is_admin %}badge-primary{% else %}badge-secondary{% endif %}">
+                                    {{ 'Admin' if is_admin else 'User' }}
                                 </span>
                             </td>
                             <td>
@@ -61,23 +54,23 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <div class="btn-group action-btn-group" role="group">
-                                    {% if user.id != session['user_id'] %}
-                                        <form action="{{ url_for('toggle_admin_status', user_id=user.id) }}" method="POST" class="d-inline">
-                                            <button type="submit" class="btn btn-action btn-sm {% if user.is_admin %}btn-outline-primary{% else %}btn-outline-secondary{% endif %}" 
-                                                    title="{{ 'Remove Admin' if user.is_admin else 'Make Admin' }}">
-                                                <i class="fas {% if user.is_admin %}fa-user-shield{% else %}fa-user{% endif %}"></i>
-                                                <span class="action-label">{{ 'Remove Admin' if user.is_admin else 'Make Admin' }}</span>
+                                <div class="action-btn-group" role="group">
+                                    {% if uid != session['user_id'] %}
+                                        <form action="{{ url_for('toggle_admin_status', user_id=uid) }}" method="POST" class="d-inline">
+                                            <button type="submit" class="btn btn-action btn-sm {% if is_admin %}btn-outline-primary{% else %}btn-outline-secondary{% endif %}"
+                                                    title="{{ 'Remove Admin' if is_admin else 'Make Admin' }}">
+                                                <i class="fas {% if is_admin %}fa-user-shield{% else %}fa-user{% endif %}"></i>
+                                                <span class="action-label">{{ 'Remove Admin' if is_admin else 'Make Admin' }}</span>
                                             </button>
                                         </form>
-                                        <form action="{{ url_for('toggle_user_active', user_id=user.id) }}" method="POST" class="d-inline">
-                                            <button type="submit" class="btn btn-action btn-sm {% if user.is_active %}btn-outline-success{% else %}btn-outline-danger{% endif %}"
-                                                    title="{{ 'Deactivate' if user.is_active else 'Activate' }}">
-                                                <i class="fas {% if user.is_active %}fa-user-check{% else %}fa-user-times{% endif %}"></i>
-                                                <span class="action-label">{{ 'Deactivate' if user.is_active else 'Activate' }}</span>
+                                        <form action="{{ url_for('toggle_user_active', user_id=uid) }}" method="POST" class="d-inline">
+                                            <button type="submit" class="btn btn-action btn-sm {% if is_active %}btn-outline-success{% else %}btn-outline-danger{% endif %}"
+                                                    title="{{ 'Deactivate' if is_active else 'Activate' }}">
+                                                <i class="fas {% if is_active %}fa-user-check{% else %}fa-user-times{% endif %}"></i>
+                                                <span class="action-label">{{ 'Deactivate' if is_active else 'Activate' }}</span>
                                             </button>
                                         </form>
-                                        <form action="{{ url_for('delete_user', user_id=user.id) }}" method="POST" class="d-inline"
+                                        <form action="{{ url_for('delete_user', user_id=uid) }}" method="POST" class="d-inline"
                                               onsubmit="return confirm('Are you sure you want to delete this user? This action cannot be undone.');">
                                             <button type="submit" class="btn btn-action btn-sm btn-outline-danger" title="Delete User">
                                                 <i class="fas fa-trash-alt"></i>
@@ -99,20 +92,55 @@
 </div>
 
 <style>
-.user-table-scroll {
+/* Page can grow; table scrolls inside viewport so actions stay usable */
+.admin-users-page {
+    min-height: 0;
+}
+.admin-users-card {
+    overflow: visible;
+    min-width: 0;
+}
+/* Global style.css sets table { width:100%; table-layout:fixed; overflow:hidden } — undo for this table so it can extend and scroll horizontally */
+.admin-users-page .user-table-scroll {
+    max-height: min(70vh, calc(100vh - 220px));
+    overflow-x: scroll;
+    overflow-y: auto;
+    width: 100%;
+    min-width: 0;
+    padding-bottom: 14px;
+    -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
     scrollbar-color: #dee2e6 #f8f9fa;
 }
-.user-table-scroll::-webkit-scrollbar {
-    width: 8px;
-    background: #f8f9fa;
+.admin-users-page .user-table-scroll::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    background: #f1f3f5;
 }
-.user-table-scroll::-webkit-scrollbar-thumb {
-    background: #dee2e6;
-    border-radius: 4px;
+.admin-users-page .user-table-scroll::-webkit-scrollbar-thumb {
+    background: #adb5bd;
+    border-radius: 5px;
 }
-.user-table-fixed {
-    min-width: 1200px;
+.admin-users-page .user-table-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #e9ecef !important;
+    box-shadow: inset 0 -1px 0 #dee2e6;
+}
+.admin-users-page table.user-table-fixed {
+    table-layout: auto !important;
+    width: max-content !important;
+    min-width: 1180px !important;
+    max-width: none !important;
+    overflow: visible !important;
+    margin-bottom: 0;
+    border: 1px solid #dee2e6;
+}
+.admin-users-page table.user-table-fixed th:last-child,
+.admin-users-page table.user-table-fixed td:last-child {
+    white-space: nowrap;
+    min-width: 28rem;
 }
 .action-btn-group {
     display: flex;
@@ -156,8 +184,8 @@
         min-width: 38px;
         max-width: 38px;
     }
-    .user-table-fixed {
-        min-width: 600px;
+    .admin-users-page table.user-table-fixed {
+        min-width: 720px !important;
     }
 }
 .table th {

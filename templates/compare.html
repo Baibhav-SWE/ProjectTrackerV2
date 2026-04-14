@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 
+{% block title %}Compare Pre Experiment and Post Experiment Data{% endblock %}
+
 {% block content %}
 <style>
     .stats-card {
@@ -93,18 +95,53 @@
     .gain.negative {
         color: #dc3545;
     }
+    .series-controls {
+        margin: 20px 0;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background-color: #f9f9f9;
+    }
+    .checkbox-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-top: 10px;
+    }
+    .series-checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        cursor: pointer;
+        padding: 5px 10px;
+        border-radius: 4px;
+        background-color: white;
+        border: 1px solid #ddd;
+        margin-bottom: 0;
+    }
+    .series-checkbox-label:hover {
+        background-color: #f0f0f0;
+    }
+    .color-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+    }
+    .compare-combined-plot.plot-container {
+        width: 100%;
+        min-height: 700px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 10px;
+        background: #fff;
+        margin-top: 10px;
+    }
 </style>
 
 <div class="container mt-4">
-    <h2>Compare Pre and Post Data</h2>
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category }}">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
+    <h2>Compare Pre Experiment and Post Experiment Data</h2>
 
     {% if error %}
         <div class="alert alert-danger">
@@ -113,16 +150,23 @@
     {% endif %}
 
     {% if show_selection %}
+        {% if not pre_data_files and not post_data_files %}
+        <div class="alert alert-warning">No documents found in <code>pre_data</code> or <code>post_data</code>. Check the database name in your URI or set <code>MONGODB_COMPARE_DB</code> to the database that contains those collections.</div>
+        {% elif not pre_data_files %}
+        <div class="alert alert-warning">No documents in <code>pre_data</code>.</div>
+        {% elif not post_data_files %}
+        <div class="alert alert-warning">No documents in <code>post_data</code>.</div>
+        {% endif %}
         <form method="POST" class="mb-4">
             <div class="row">
                 <div class="col-md-6">
                     <div class="form-group">
                         <label for="pre_file_id"><strong>Select Pre-Data File:</strong></label>
-                        <select class="form-control" id="pre_file_id" name="pre_file_id" required>
+                        <select class="form-control" id="pre_file_id" name="pre_file_id" required {% if not pre_data_files %}disabled{% endif %}>
                             <option value="">Choose a file...</option>
                             {% for file in pre_data_files %}
                                 <option value="{{ file._id }}" {% if selected_pre_file == file._id %}selected{% endif %}>
-                                    {{ file.design_name or 'Unnamed Design' }}
+                                    {{ file.label }}
                                 </option>
                             {% endfor %}
                         </select>
@@ -131,11 +175,11 @@
                 <div class="col-md-6">
                     <div class="form-group">
                         <label for="post_file_id"><strong>Select Post-Data File:</strong></label>
-                        <select class="form-control" id="post_file_id" name="post_file_id" required>
+                        <select class="form-control" id="post_file_id" name="post_file_id" required {% if not post_data_files %}disabled{% endif %}>
                             <option value="">Choose a file...</option>
                             {% for file in post_data_files %}
                                 <option value="{{ file._id }}" {% if selected_post_file == file._id %}selected{% endif %}>
-                                    {{ file.design_name or 'Unnamed Design' }}
+                                    {{ file.label }}
                                 </option>
                             {% endfor %}
                         </select>
@@ -143,12 +187,12 @@
                 </div>
             </div>
             <div class="text-center mt-3">
-                <button type="submit" class="btn btn-primary">Compare Selected Files</button>
+                <button type="submit" class="btn btn-primary" {% if not pre_data_files or not post_data_files %}disabled{% endif %}>Compare Selected Files</button>
             </div>
         </form>
     {% endif %}
 
-    {% if not error and transmittance_plot %}
+    {% if not error and combined_compare_plot %}
     <div class="statistics-section">
         <h3>Statistics </h3>
         <div class="statistics-grid">
@@ -179,106 +223,93 @@
         </div>
     </div>
 
-    <div class="plots-section">
-        <div id="transmittancePlot"></div>
-        <div id="reflectancePlot"></div>
-        <div id="absorbancePlot"></div>
+    <h3 class="mt-4">Combined plot</h3>
+    <p class="text-muted small">Same style as <strong>View Plots</strong>: all T / R / A curves for pre and post on one chart.</p>
+    <div class="mb-2">
+        <button type="button" id="downloadComparePlot" class="btn btn-success" style="display:none;">Download plot</button>
     </div>
+    <div id="compareSeriesControls" class="series-controls" style="display:none;">
+        <label class="d-block font-weight-bold mb-1">Toggle data series</label>
+        <div id="compareCheckboxContainer" class="checkbox-container"></div>
+    </div>
+    <div class="plot-container compare-combined-plot" id="comparePlotArea"></div>
     {% endif %}
 </div>
 
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+{% if combined_compare_plot %}
 <script>
-    // Parse the plot data from the server
-    var transmittancePlot = {{ transmittance_plot | safe }};
-    var reflectancePlot = {{ reflectance_plot | safe }};
-    var absorbancePlot = {{ absorbance_plot | safe }};
+(function() {
+    var combined = {{ combined_compare_plot | safe }};
+    var colors = ['#0066FF', '#FF3333', '#33CC33', '#FFD700', '#9933FF', '#FF8000'];
 
-    console.log('Transmittance Plot Data:', transmittancePlot);
-    console.log('Reflectance Plot Data:', reflectancePlot);
-    console.log('Absorbance Plot Data:', absorbancePlot);
+    function buildCompareSeriesToggles(traces) {
+        var container = document.getElementById('compareCheckboxContainer');
+        if (!container || !traces || !traces.length) return;
+        container.innerHTML = '';
+        traces.forEach(function(trace, index) {
+            var label = document.createElement('label');
+            label.className = 'series-checkbox-label';
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = true;
+            cb.addEventListener('change', function() {
+                var cbs = document.querySelectorAll('#compareCheckboxContainer input[type="checkbox"]');
+                var vis = Array.prototype.map.call(cbs, function(c) { return c.checked; });
+                Plotly.restyle('comparePlotArea', { visible: vis });
+            });
+            var dot = document.createElement('span');
+            dot.className = 'color-indicator';
+            var lc = trace.line && trace.line.color;
+            dot.style.backgroundColor = lc || colors[index % colors.length];
+            label.appendChild(cb);
+            label.appendChild(dot);
+            label.appendChild(document.createTextNode(trace.name || ('Series ' + (index + 1))));
+            container.appendChild(label);
+        });
+        var sc = document.getElementById('compareSeriesControls');
+        if (sc) sc.style.display = 'block';
+    }
 
-    // Create the plots
-    Plotly.newPlot('transmittancePlot', transmittancePlot.data, transmittancePlot.layout);
-    Plotly.newPlot('reflectancePlot', reflectancePlot.data, reflectancePlot.layout);
-    Plotly.newPlot('absorbancePlot', absorbancePlot.data, absorbancePlot.layout);
-
-    function calculateStatistics(data, type) {
-        console.log(`Calculating statistics for ${type}:`, data);
-        
-        if (!data || !data.data || data.data.length < 2) {
-            console.log('No valid data available');
-            return 0;
-        }
-        
-        // Get the correct trace based on type
-        let trace;
-        if (type.startsWith('pre_') || type === 'transmittance' || type === 'reflectance' || type === 'absorbance') {
-            trace = data.data[0]; // Pre-data is first trace
-        } else {
-            trace = data.data[1]; // Post-data is second trace
-        }
-        
-        if (!trace || !trace.x || !trace.y) {
-            console.log('No trace data found');
-            return 0;
-        }
-        
-        console.log('Processing trace:', trace.name);
-        console.log('X values:', trace.x);
-        console.log('Y values:', trace.y);
-        
-        let validValues = [];
-        for (let i = 0; i < trace.x.length; i++) {
-            const wavelength = parseFloat(trace.x[i]);
-            const value = parseFloat(trace.y[i]);
-            
-            if (wavelength >= 400 && wavelength <= 1200 && !isNaN(value) && value > 0) {
-                validValues.push(value);
+    function run() {
+        if (typeof Plotly === 'undefined' || !combined || !combined.data) return;
+        var config = {
+            responsive: true,
+            displayModeBar: true,
+            displaylogo: false,
+            scrollZoom: true,
+            toImageButtonOptions: {
+                format: 'png',
+                filename: 'compare_pre_post',
+                height: 800,
+                width: 1200,
+                scale: 3
             }
+        };
+        Plotly.newPlot('comparePlotArea', combined.data, combined.layout, config).then(function() {
+            var dl = document.getElementById('downloadComparePlot');
+            if (dl) dl.style.display = 'inline-block';
+            buildCompareSeriesToggles(combined.data);
+        });
+        var dlBtn = document.getElementById('downloadComparePlot');
+        if (dlBtn) {
+            dlBtn.addEventListener('click', function() {
+                Plotly.downloadImage('comparePlotArea', {
+                    format: 'png',
+                    width: 1200,
+                    height: 800,
+                    filename: 'compare_pre_post',
+                    scale: 3
+                });
+            });
         }
-        
-        console.log('Valid values:', validValues);
-        
-        if (validValues.length === 0) {
-            console.log('No valid values found for averaging');
-            return 0;
-        }
-        
-        const average = validValues.reduce((a, b) => a + b, 0) / validValues.length;
-        console.log(`Average: ${average}`);
-        return average;
     }
 
-    // Calculate statistics
-    const preTransmittance = calculateStatistics(transmittancePlot, 'pre_transmittance');
-    const postTransmittance = calculateStatistics(transmittancePlot, 'post_transmittance');
-    const preReflectance = calculateStatistics(reflectancePlot, 'pre_reflectance');
-    const postReflectance = calculateStatistics(reflectancePlot, 'post_reflectance');
-    const preAbsorbance = calculateStatistics(absorbancePlot, 'pre_absorbance');
-    const postAbsorbance = calculateStatistics(absorbancePlot, 'post_absorbance');
-
-    console.log('Final Statistics:');
-    console.log('Pre-Transmittance:', preTransmittance);
-    console.log('Post-Transmittance:', postTransmittance);
-    console.log('Pre-Reflectance:', preReflectance);
-    console.log('Post-Reflectance:', postReflectance);
-    console.log('Pre-Absorbance:', preAbsorbance);
-    console.log('Post-Absorbance:', postAbsorbance);
-
-    // Calculate gains
-    function calculateGain(preValue, postValue) {
-        if (preValue <= 0) return 0;
-        return ((postValue - preValue) / preValue) * 100;
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', run);
+    } else {
+        run();
     }
-
-    const transmittanceGain = calculateGain(preTransmittance, postTransmittance);
-    const reflectanceGain = calculateGain(preReflectance, postReflectance);
-    const absorbanceGain = calculateGain(preAbsorbance, postAbsorbance);
-
-    console.log('Gains:');
-    console.log('Transmittance Gain:', transmittanceGain);
-    console.log('Reflectance Gain:', reflectanceGain);
-    console.log('Absorbance Gain:', absorbanceGain);
+})();
 </script>
+{% endif %}
 {% endblock %} 
