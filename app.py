@@ -172,6 +172,26 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+
+PASSWORD_POLICY_MESSAGE = (
+    'Password must be at least 8 characters and include one uppercase letter '
+    'and one special character (for example !@#$%).'
+)
+
+
+def password_policy_error(password):
+    """Return an error message if password does not meet policy, else None."""
+    if not password:
+        return 'Password is required.'
+    if len(password) < 8:
+        return PASSWORD_POLICY_MESSAGE
+    if not re.search(r'[A-Z]', password):
+        return PASSWORD_POLICY_MESSAGE
+    if not re.search(r'[^A-Za-z0-9]', password):
+        return PASSWORD_POLICY_MESSAGE
+    return None
+
+
 # MongoDB index already present but with different options (e.g. sparse vs not) — safe to skip
 _INDEX_CONFLICT_CODES = frozenset({85, 86})  # IndexOptionsConflict, IndexKeySpecsConflict
 
@@ -678,6 +698,11 @@ def register():
         flash('Passwords do not match.', 'error')
         return redirect(url_for('login'))
 
+    pw_err = password_policy_error(password)
+    if pw_err:
+        flash(pw_err, 'error')
+        return redirect(url_for('login'))
+
     users = get_users_collection()
     if users is None:
         flash('Database not connected', 'error')
@@ -929,6 +954,11 @@ def reset_password(token):
 
         if password != confirm_password:
             flash('Passwords do not match.', 'error')
+            return render_template('reset_password.html', token=token)
+
+        pw_err = password_policy_error(password)
+        if pw_err:
+            flash(pw_err, 'error')
             return render_template('reset_password.html', token=token)
 
         users.update_one(
