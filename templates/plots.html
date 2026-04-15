@@ -659,10 +659,21 @@
     function parseCSVData(csvContent, fileType) {
         const lines = csvContent.split('\n').filter(line => line.trim() !== '');
         const delimiter = lines[0].includes('\t') ? '\t' : ',';
-        const headers = lines[0].split(delimiter).map(h => h.trim());
-        
+        let headers = lines[0].split(delimiter).map(h => h.trim());
+        // Strip UTF-8 BOM from first cell if present
+        if (headers[0] && headers[0].charCodeAt(0) === 0xfeff) {
+            headers[0] = headers[0].slice(1);
+        }
+        // Trailing commas create empty header names → ghost series (e.g. blank yellow chip, " (Post TRA)")
+        while (headers.length > 1 && headers[headers.length - 1] === '') {
+            headers.pop();
+        }
+
         const series = {};
         for (let i = 1; i < headers.length; i++) {
+            if (!headers[i]) {
+                continue;
+            }
             const seriesName = fileType === 'post' ? `${headers[i]} (Post TRA)` : headers[i];
             series[headers[i]] = {
                 x: [],
@@ -670,22 +681,26 @@
                 name: seriesName
             };
         }
-        
+
         for (let i = 1; i < lines.length; i++) {
             const values = lines[i].split(delimiter).map(v => v.trim());
             const wavelength = parseFloat(values[0]);
-            
+
             if (!isNaN(wavelength)) {
-                for (let j = 1; j < values.length; j++) {
+                const maxJ = Math.min(values.length, headers.length);
+                for (let j = 1; j < maxJ; j++) {
+                    if (!headers[j]) {
+                        continue;
+                    }
                     const value = parseFloat(values[j]);
-                    if (!isNaN(value) && headers[j]) {
+                    if (!isNaN(value) && series[headers[j]]) {
                         series[headers[j]].x.push(wavelength);
                         series[headers[j]].y.push(value);
                     }
                 }
             }
         }
-        
+
         return Object.values(series);
     }
 

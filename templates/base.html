@@ -52,7 +52,7 @@
         </div>
     </nav>
 
-    <div class="container mt-4{% if request.endpoint in ['login', 'forgot_password'] %} login-container-bg{% endif %}">
+    <div class="container mt-4{% if request.endpoint in ['login', 'forgot_password', 'reset_password'] %} login-container-bg{% endif %}">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}

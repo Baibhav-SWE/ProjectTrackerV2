@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}Trash{% endblock %}
+{% block title %}Temp Files{% endblock %}
 
-{% block header %}Trash{% endblock %}
+{% block header %}Temp Files{% endblock %}
 
 {% block content %}
 <div class="add-button">
@@ -51,8 +51,9 @@
         </thead>
         <tbody>
             {% for sample_trash, experiment_trash in trash_records %}
+            {% if sample_trash %}
             <tr>
-                <td>{{ sample_trash.id }}</td>
+                <td>{{ sample_trash.get('id', sample_trash.get('_id', '')) }}</td>
                 <td>{{ sample_trash.date }}</td>
                 <td>{{ sample_trash.time }} {{ sample_trash.am_pm }}</td>
                 <td>{{ sample_trash.recipe_front }}</td>
@@ -70,16 +71,23 @@
                 <td>{{ experiment_trash.sem if experiment_trash else '' }}</td>
                 <td>{{ experiment_trash.edx if experiment_trash else '' }}</td>
                 <td>{{ experiment_trash.xrd if experiment_trash else '' }}</td>
-                <td>{{ sample_trash.deleted_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                <td>{{ sample_trash.deleted_by }}</td>
                 <td>
-                    <a href="{{ url_for('restore_from_trash', id=sample_trash.id) }}" 
+                    {% if sample_trash.deleted_at %}
+                        {{ sample_trash.deleted_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td>{{ sample_trash.deleted_by or '—' }}</td>
+                <td>
+                    <a href="{{ url_for('restore_from_trash', id=sample_trash.get('id', '')) }}" 
                        class="btn-green" 
                        onclick="return confirm('Are you sure you want to restore this record?')">
                         Restore
                     </a>
                 </td>
             </tr>
+            {% endif %}
             {% endfor %}
         </tbody>
     </table>

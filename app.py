@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
-from flask_mail import Mail
 import secrets
 import plotly
 import plotly.express as px
@@ -14,6 +13,7 @@ import html
 import numpy as np
 import re
 from urllib.parse import urlparse
+from pathlib import Path
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure
@@ -21,8 +21,9 @@ from bson import ObjectId
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail as SendGridMail, Email, To, Content
 
-# Load environment variables from .env file
-load_dotenv()
+# Load only `.env` beside this file (not `.env.example` or any other name; not cwd-dependent).
+_load_dotenv_path = Path(__file__).resolve().parent / '.env'
+load_dotenv(_load_dotenv_path)
 
 # Initialize OpenAI client with API key (optional)
 openai_api_key = os.getenv('OPENAI_API_KEY')
@@ -35,14 +36,18 @@ else:
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.getenv('EMAIL_ADDRESS')
-app.config['MAIL_PASSWORD'] = os.getenv('EMAIL_PASSWORD')
-app.config['SENDGRID_API_KEY'] = os.getenv('SENDGRID_API_KEY')
-app.config['EMAIL_FROM'] = os.getenv('EMAIL_FROM')
-mail = Mail(app)
+_sg_key = (os.getenv('SENDGRID_API_KEY') or '').strip()
+if _sg_key.lower().startswith('bearer '):
+    _sg_key = _sg_key[7:].strip()
+if (len(_sg_key) >= 2) and ((_sg_key[0] == _sg_key[-1]) and _sg_key[0] in '"\''):
+    _sg_key = _sg_key[1:-1].strip()
+app.config['SENDGRID_API_KEY'] = _sg_key
+app.config['EMAIL_FROM'] = (os.getenv('EMAIL_FROM') or '').strip()
+# Correct absolute URLs in password-reset emails when not using request context defaults
+if os.getenv('SERVER_NAME'):
+    app.config['SERVER_NAME'] = os.getenv('SERVER_NAME').strip()
+if os.getenv('PREFERRED_URL_SCHEME'):
+    app.config['PREFERRED_URL_SCHEME'] = os.getenv('PREFERRED_URL_SCHEME').strip()
 
 # MongoDB connection
 MONGODB_URI = os.getenv('MONGODB_URI')
@@ -463,6 +468,9 @@ def delete_sample(id):
     if samples is None:
         flash('Database not connected', 'error')
         return redirect(url_for('index'))
+    if trash is None:
+        flash('Temp Files is not available (MongoDB). Sample was not deleted.', 'error')
+        return redirect(url_for('index'))
     
     try:
         sample = samples.find_one({'id': id})
@@ -472,24 +480,21 @@ def delete_sample(id):
         
         experiment = experiments.find_one({'sample_id': id}) if experiments is not None else None
         
-        # Move to trash
-        if trash is not None:
-            trash_record = {
-                'sample': sample,
-                'experiment': experiment,
-                'deleted_at': datetime.utcnow(),
-                'deleted_by': session.get('username')
-            }
-            trash.insert_one(trash_record)
+        trash_record = {
+            'sample': sample,
+            'experiment': experiment,
+            'deleted_at': datetime.utcnow(),
+            'deleted_by': session.get('username'),
+        }
+        trash.insert_one(trash_record)
         
-        # Delete from main collections
         samples.delete_one({'id': id})
         if experiments is not None:
             experiments.delete_one({'sample_id': id})
         if plots is not None:
             plots.delete_many({'sample_id': id})
         
-        flash('Record moved to trash successfully!', 'success')
+        flash('Record moved to Temp Files successfully!', 'success')
         
     except Exception as e:
         flash(f'Error deleting record: {str(e)}', 'error')
@@ -720,10 +725,16 @@ def view_trash():
         return render_template('trash.html', trash_records=[])
     
     trash_records = list(trash.find().sort('deleted_at', -1))
-    # Convert to format expected by template
+    # Template expects deleted_at / deleted_by on the sample row; they live on the trash root doc
     formatted_records = []
     for record in trash_records:
-        formatted_records.append((record.get('sample'), record.get('experiment')))
+        sample = record.get('sample')
+        if not sample:
+            continue
+        sample = dict(sample)
+        sample['deleted_at'] = record.get('deleted_at')
+        sample['deleted_by'] = record.get('deleted_by')
+        formatted_records.append((sample, record.get('experiment')))
     
     return render_template('trash.html', trash_records=formatted_records)
 
@@ -741,7 +752,7 @@ def restore_from_trash(id):
     try:
         trash_record = trash.find_one({'sample.id': id})
         if not trash_record:
-            flash('Record not found in trash', 'error')
+            flash('Record not found in Temp Files', 'error')
             return redirect(url_for('view_trash'))
         
         # Check if sample already exists
@@ -749,18 +760,25 @@ def restore_from_trash(id):
             flash(f'A sample with ID {id} already exists!', 'error')
             return redirect(url_for('view_trash'))
         
-        # Restore sample
+        trash_oid = trash_record.get('_id')
+        
+        # Restore sample (strip display-only keys if present)
         sample_data = trash_record.get('sample')
         if sample_data:
+            sample_data = dict(sample_data)
+            sample_data.pop('deleted_at', None)
+            sample_data.pop('deleted_by', None)
             samples.insert_one(sample_data)
         
         # Restore experiment if exists
         experiment_data = trash_record.get('experiment')
-        if experiment_data and experiments:
-            experiments.insert_one(experiment_data)
+        if experiment_data and experiments is not None:
+            experiments.insert_one(dict(experiment_data))
         
-        # Delete from trash
-        trash.delete_one({'sample.id': id})
+        if trash_oid is not None:
+            trash.delete_one({'_id': trash_oid})
+        else:
+            trash.delete_one({'sample.id': id})
         flash('Record restored successfully!', 'success')
         
     except Exception as e:
@@ -768,39 +786,70 @@ def restore_from_trash(id):
         
     return redirect(url_for('view_trash'))
 
+def _find_user_by_email(users, email):
+    """Exact match first, then case-insensitive match on stored email."""
+    if not email:
+        return None
+    user = users.find_one({'email': email})
+    if user:
+        return user
+    return users.find_one({'email': {'$regex': f'^{re.escape(email)}$', '$options': 'i'}})
+
+
 @app.route('/forgot_password', methods=['GET', 'POST'])
 def forgot_password():
     if request.method == 'POST':
-        email = request.form.get('email')
+        email = (request.form.get('email') or '').strip()
         users = get_users_collection()
-        
+
         if users is None:
             flash('Database not connected', 'error')
             return redirect(url_for('forgot_password'))
-        
-        user = users.find_one({'email': email})
-        
-        if user:
-            token = secrets.token_urlsafe(32)
-            users.update_one(
-                {'_id': user['_id']},
-                {'$set': {
-                    'reset_token': token,
-                    'reset_token_expiry': datetime.utcnow() + timedelta(hours=1)
-                }}
+
+        if not email:
+            flash('Please enter your email address.', 'error')
+            return redirect(url_for('forgot_password'))
+
+        api_key = app.config.get('SENDGRID_API_KEY') or ''
+        email_from = app.config.get('EMAIL_FROM') or ''
+        if not api_key or not email_from:
+            flash(
+                'Password reset email is not configured (missing SENDGRID_API_KEY or EMAIL_FROM). '
+                'Contact your administrator.',
+                'error',
             )
-            
-            reset_link = url_for('reset_password', token=token, _external=True)
-            
-            try:
-                sg = SendGridAPIClient(app.config['SENDGRID_API_KEY'])
-                message = SendGridMail(
-                    from_email=Email(app.config['EMAIL_FROM']),
-                    to_emails=To(email),
-                    subject='Password Reset Request - Project Tracker',
-                    html_content=Content(
-                        'text/html',
-                        f'''
+            return redirect(url_for('forgot_password'))
+
+        user = _find_user_by_email(users, email)
+
+        if not user:
+            flash(
+                'If that email is registered, you will receive a link to reset your password shortly.',
+                'success',
+            )
+            return redirect(url_for('login'))
+
+        token = secrets.token_urlsafe(32)
+        users.update_one(
+            {'_id': user['_id']},
+            {'$set': {
+                'reset_token': token,
+                'reset_token_expiry': datetime.utcnow() + timedelta(hours=1),
+            }},
+        )
+
+        reset_link = url_for('reset_password', token=token, _external=True)
+        to_address = user.get('email') or email
+
+        try:
+            sg = SendGridAPIClient(api_key)
+            message = SendGridMail(
+                from_email=Email(email_from),
+                to_emails=To(to_address),
+                subject='Password Reset Request - Project Tracker',
+                html_content=Content(
+                    'text/html',
+                    f'''
                         <html>
                             <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
                                 <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -808,29 +857,53 @@ def forgot_password():
                                     <p>Hello,</p>
                                     <p>We received a request to reset your password. Click the button below:</p>
                                     <div style="text-align: center; margin: 30px 0;">
-                                        <a href="{reset_link}" 
-                                           style="background-color: #ff1825; color: white; padding: 12px 24px; 
+                                        <a href="{html.escape(reset_link)}"
+                                           style="background-color: #ff1825; color: white; padding: 12px 24px;
                                                   text-decoration: none; border-radius: 4px; font-weight: bold;">
                                             Reset Password
                                         </a>
                                     </div>
                                     <p>This link will expire in 1 hour.</p>
+                                    <p style="font-size: 12px; color: #666;">If you did not request this, you can ignore this email.</p>
                                 </div>
                             </body>
                         </html>
-                        '''
-                    )
+                        ''',
+                ),
+            )
+            response = sg.send(message)
+            status = getattr(response, 'status_code', None)
+            if status is not None and status not in (200, 201, 202):
+                raise RuntimeError(f'SendGrid HTTP {status}: {getattr(response, "body", "")}')
+
+            flash(
+                'If that email is registered, you will receive a link to reset your password shortly.',
+                'success',
+            )
+            return redirect(url_for('login'))
+
+        except Exception as e:
+            err = str(e)
+            print(f"Error sending email: {err}")
+            users.update_one(
+                {'_id': user['_id']},
+                {'$set': {'reset_token': None, 'reset_token_expiry': None}},
+            )
+            hint = ''
+            if '401' in err or 'Unauthorized' in err:
+                hint = (
+                    'HTTP 401 means SendGrid rejected your API key (wrong, revoked, or typo in .env)—not EMAIL_FROM or SERVER_NAME. '
+                    'Create a new key with Mail Send in the SendGrid dashboard and restart the app. '
                 )
-                sg.send(message)
-                flash('Password reset instructions have been sent to your email.', 'success')
-                return redirect(url_for('login'))
-                
-            except Exception as e:
-                print(f"Error sending email: {str(e)}")
-                flash('Error sending password reset email. Please try again later.', 'error')
-                return redirect(url_for('forgot_password'))
-        
-        flash('Email address not found.', 'error')
+            flash(
+                'Could not send the reset email. '
+                + hint
+                + 'Otherwise verify EMAIL_FROM is a verified sender and, if reset links are wrong, set SERVER_NAME and PREFERRED_URL_SCHEME. '
+                f'Details: {err[:180]}',
+                'error',
+            )
+            return redirect(url_for('forgot_password'))
+
     return render_template('forgot_password.html')
 
 @app.route('/reset_password/<token>', methods=['GET', 'POST'])
@@ -847,17 +920,21 @@ def reset_password(token):
         return redirect(url_for('forgot_password'))
     
     if request.method == 'POST':
-        password = request.form.get('password')
-        confirm_password = request.form.get('confirm_password')
-        
+        password = request.form.get('password') or ''
+        confirm_password = request.form.get('confirm_password') or ''
+
+        if not password:
+            flash('Please choose a password.', 'error')
+            return render_template('reset_password.html', token=token)
+
         if password != confirm_password:
             flash('Passwords do not match.', 'error')
-            return render_template('reset_password.html')
-        
+            return render_template('reset_password.html', token=token)
+
         users.update_one(
             {'_id': user['_id']},
             {'$set': {
-                'password': generate_password_hash(password),
+                'password': generate_password_hash(password, method='pbkdf2:sha256'),
                 'reset_token': None,
                 'reset_token_expiry': None
             }}
@@ -866,7 +943,7 @@ def reset_password(token):
         flash('Your password has been reset successfully.', 'success')
         return redirect(url_for('login'))
     
-    return render_template('reset_password.html')
+    return render_template('reset_password.html', token=token)
 
 @app.route('/plots', methods=['GET', 'POST'])
 @login_required
