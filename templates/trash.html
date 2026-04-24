@@ -40,6 +40,7 @@
                 <th>Transmittance</th>
                 <th>Reflectance</th>
                 <th>Absorbance</th>
+                <th>PL</th>
                 <th>PLQY</th>
                 <th>SEM</th>
                 <th>EDX</th>
@@ -67,6 +68,7 @@
                 <td>{{ experiment_trash.transmittance if experiment_trash else '' }}</td>
                 <td>{{ experiment_trash.reflectance if experiment_trash else '' }}</td>
                 <td>{{ experiment_trash.absorbance if experiment_trash else '' }}</td>
+                <td>{{ experiment_trash.pl if experiment_trash else '' }}</td>
                 <td>{{ experiment_trash.plqy if experiment_trash else '' }}</td>
                 <td>{{ experiment_trash.sem if experiment_trash else '' }}</td>
                 <td>{{ experiment_trash.edx if experiment_trash else '' }}</td>

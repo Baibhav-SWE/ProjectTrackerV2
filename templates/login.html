@@ -148,8 +148,8 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 <div class="login-header">
-    <div class="app-title">Project Tracker</div>
-    <div class="app-tagline">Discover the Perfect Project Management: Organize, Track, and Succeed.</div>
+    <div class="app-title">Experimental Sample Tracker</div>
+    <div class="app-tagline">Track experimental samples and lab data—from intake through analysis and review.</div>
 </div>
 <div class="login-container">
     <div class="login-box">
@@ -164,6 +164,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 {% endfor %}
             {% endif %}
         {% endwith %}
+        {% if db_connected is defined and not db_connected %}
+        <div class="alert" role="alert">
+            <strong>MongoDB is not connected.</strong> Set <code style="opacity:0.95;">MONGODB_URI</code> in the
+            <code>.env</code> file next to <code>app.py</code>, restart this app, and read the server terminal for the
+            exact error. On Atlas, allow your current IP under Network Access and confirm the user/password in the URI.
+        </div>
+        {% endif %}
         <!-- Login Form -->
         <form method="POST" action="{{ url_for('login') }}" class="login-form" id="loginForm">
             <h1>Login</h1>
@@ -178,6 +185,8 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="form-links">
                 <a href="{{ url_for('forgot_password') }}">Forgot Password?</a>
+                <span class="form-links-sep"> · </span>
+                <a href="{{ url_for('user_help') }}">User guide (PDF)</a>
             </div>
             <div class="register-link">
                 Don't have an account? <a href="#" onclick="showRegister();return false;">Register here</a>

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Help · Experimental Sample Tracker{% endblock %}
+
+{% block content %}
+<div class="help-page">
+    <h1 class="help-title">User guide</h1>
+    <p class="help-lead">Experimental Sample Tracker — reference PDF from AWS S3. View below, open in a new tab, or download.</p>
+
+    {% if not help_pdf_url %}
+    <div class="alert alert-warning" role="alert">
+        Help document URL is not configured. Set <code>HELP_PDF_URL</code> in your environment or <code>.env</code>.
+    </div>
+    {% else %}
+    <div class="help-toolbar mb-3">
+        <a class="btn btn-danger" href="{{ help_pdf_url }}" target="_blank" rel="noopener noreferrer">
+            <i class="fas fa-external-link-alt"></i> Open in new tab
+        </a>
+        <a class="btn btn-outline-secondary" href="{{ help_pdf_url }}" download>
+            <i class="fas fa-download"></i> Download PDF
+        </a>
+    </div>
+    <div class="help-pdf-frame-wrap">
+        <iframe
+            class="help-pdf-frame"
+            src="{{ help_pdf_url }}"
+            title="Experimental Sample Tracker user guide"
+        ></iframe>
+    </div>
+    <p class="help-footnote text-muted small mt-2">If the document does not appear in the frame, use <strong>Open in new tab</strong> (some browsers block embedded PDFs from S3).</p>
+    {% endif %}
+</div>
+
+<style>
+.help-page { max-width: 1200px; margin: 0 auto; }
+.help-title { color: #ff1825; font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; }
+.help-lead { color: #ccc; margin-bottom: 1rem; }
+.help-footnote { color: #888 !important; }
+.help-toolbar .btn-danger { background-color: #ff1825; border-color: #ff1825; }
+.help-toolbar .btn-danger:hover { background-color: #e61520; border-color: #e61520; }
+.help-pdf-frame-wrap {
+    height: calc(100vh - 280px);
+    min-height: 480px;
+    border: 1px solid #444;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #1a1a1a;
+}
+.help-pdf-frame {
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+</style>
+{% endblock %}

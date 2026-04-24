@@ -1,4 +1,4 @@
-# AWI Project Tracker
+# AWI Experimental Sample Tracker
 
 A comprehensive project tracking and management system designed for managing samples, experiments, and research data. This application provides a robust platform for tracking, analyzing, and visualizing experimental data with advanced features for data management and analysis.
 

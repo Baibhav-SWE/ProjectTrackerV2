@@ -2,11 +2,11 @@
 
 {% block title %}Chatbot{% endblock %}
 
-{% block header %}Project Tracker Chatbot{% endblock %}
+{% block header %}Experimental Sample Tracker Chatbot{% endblock %}
 
 {% block content %}
 <div class="chatbot-container">
-    <h2>Project Tracker Assistant</h2>
+    <h2>Experimental Sample Tracker Assistant</h2>
     
     <div class="chat-box">
         <div class="chat-messages" id="chatMessages">
@@ -82,6 +82,7 @@
                                 <th>Transmittance</th>
                                 <th>Reflectance</th>
                                 <th>Absorbance</th>
+                                <th>PL</th>
                                 <th>PLQY</th>
                                 <th>SEM</th>
                                 <th>EDX</th>
@@ -131,6 +132,8 @@
                                             <a href="{{ experiment.reflectance }}" target="_blank" class="view-link">View</a>
                                         {% elif column == 'absorbance' and experiment and experiment.absorbance %}
                                             <a href="{{ experiment.absorbance }}" target="_blank" class="view-link">View</a>
+                                        {% elif column == 'pl' and experiment and experiment.pl %}
+                                            <a href="{{ experiment.pl }}" target="_blank" class="view-link">View</a>
                                         {% elif column == 'plqy' and experiment and experiment.plqy %}
                                             <a href="{{ experiment.plqy }}" target="_blank" class="view-link">View</a>
                                         {% elif column == 'sem' and experiment and experiment.sem %}
@@ -174,6 +177,11 @@
                                 <td class="center">
                                     {% if experiment and experiment.absorbance %}
                                         <a href="{{ experiment.absorbance }}" target="_blank" class="view-link">View</a>
+                                    {% endif %}
+                                </td>
+                                <td class="center">
+                                    {% if experiment and experiment.pl %}
+                                        <a href="{{ experiment.pl }}" target="_blank" class="view-link">View</a>
                                     {% endif %}
                                 </td>
                                 <td class="center">

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}Project Tracker{% endblock %}
+{% block title %}Experimental Sample Tracker{% endblock %}
 
-{% block header %}Project Tracker{% endblock %}
+{% block header %}Experimental Sample Tracker{% endblock %}
 
 {% block content %}
 <div class="container">
@@ -13,6 +13,7 @@
         <a href="{{ url_for('combined_view') }}" class="main-action-btn">Combined View</a>
         <a href="{{ url_for('compare') }}" class="main-action-btn">Compare Samples</a>
         <a href="{{ url_for('plots') }}" class="main-action-btn">View Plots</a>
+        <a href="{{ url_for('pl_plots') }}" class="main-action-btn">PL Plots</a>
         <a href="{{ url_for('view_trash') }}" class="main-action-btn">Temp Files</a>
     </div>
 

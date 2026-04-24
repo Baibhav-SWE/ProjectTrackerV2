@@ -16,6 +16,7 @@
                 <th>Transmittance</th>
                 <th>Reflectance</th>
                 <th>Absorbance</th>
+                <th>PL</th>
                 <th>PLQY</th>
                 <th>SEM</th>
                 <th>EDX</th>
@@ -40,6 +41,11 @@
                 <td class="center">
                     {% if experiment.absorbance %}
                         <a href="{{ experiment.absorbance }}" target="_blank">View</a>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if experiment.pl %}
+                        <a href="{{ experiment.pl }}" target="_blank">View</a>
                     {% endif %}
                 </td>
                 <td class="center">

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file, abort
 from datetime import datetime, timedelta
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -17,6 +17,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure
+from pymongo.uri_parser import parse_uri
 from bson import ObjectId
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail as SendGridMail, Email, To, Content
@@ -49,26 +50,43 @@ if os.getenv('SERVER_NAME'):
 if os.getenv('PREFERRED_URL_SCHEME'):
     app.config['PREFERRED_URL_SCHEME'] = os.getenv('PREFERRED_URL_SCHEME').strip()
 
+_DEFAULT_HELP_PDF_URL = (
+    'https://awi-experiential-sample-tracker.s3.us-east-2.amazonaws.com/'
+    'Project+Tracker+User+Help.pdf'
+)
+app.config['HELP_PDF_URL'] = (os.getenv('HELP_PDF_URL') or _DEFAULT_HELP_PDF_URL).strip()
+
 # MongoDB connection
-MONGODB_URI = os.getenv('MONGODB_URI')
+MONGODB_URI = (os.getenv('MONGODB_URI') or '').strip()
 mongo_client = None
 mongo_db = None
 
 if MONGODB_URI:
     try:
-        print(f"Attempting to connect to MongoDB...")
-        mongo_client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000, tlsAllowInvalidCertificates=True)
-        mongo_client.server_info()  # Force connection
-        print("Successfully connected to MongoDB")
-        # Get database name from URI or use default
-        db_name = MONGODB_URI.split('/')[-1].split('?')[0] if '/' in MONGODB_URI else 'project_tracker'
+        print('Attempting to connect to MongoDB...')
+        parsed = parse_uri(MONGODB_URI)
+        db_name = (os.getenv('MONGODB_DB_NAME') or '').strip() or parsed.get('database') or 'project_tracker'
+        if not parsed.get('database') and not (os.getenv('MONGODB_DB_NAME') or '').strip():
+            print(f"Note: no database name in MONGODB_URI; using {db_name!r} (set MONGODB_DB_NAME to override).")
+        mongo_client = MongoClient(
+            MONGODB_URI,
+            serverSelectionTimeoutMS=15000,
+            tlsAllowInvalidCertificates=True,
+        )
+        mongo_client.server_info()
         mongo_db = mongo_client[db_name]
+        print(f'Successfully connected to MongoDB (database={db_name!r}).')
     except Exception as e:
-        print(f"Error connecting to MongoDB: {str(e)}")
+        print(f'Error connecting to MongoDB: {e}')
+        print(
+            'Check: MONGODB_URI in .env next to app.py; restart the server after edits. '
+            'For MongoDB Atlas: Network Access → allow your IP (or 0.0.0.0/0 for testing), '
+            'and verify the database user/password in the URI.'
+        )
         mongo_client = None
         mongo_db = None
 else:
-    print("Warning: MONGODB_URI not found in environment variables.")
+    print('Warning: MONGODB_URI is missing or empty. Set it in .env beside app.py and restart the app.')
 
 # Helper function to get collections
 def get_users_collection():
@@ -300,7 +318,7 @@ def login():
         else:
             flash('Invalid username/email or password', 'error')
     
-    return render_template('login.html')
+    return render_template('login.html', db_connected=mongo_db is not None)
 
 @app.route('/logout')
 def logout():
@@ -393,12 +411,13 @@ def add_sample():
 
         # Create experiment if any experiment data is provided
         experiments = get_experiments_collection()
-        if experiments is not None and any(request.form.get(field) for field in ['transmittance', 'reflectance', 'absorbance', 'plqy', 'sem', 'edx', 'xrd']):
+        if experiments is not None and any(request.form.get(field) for field in ['transmittance', 'reflectance', 'absorbance', 'pl', 'plqy', 'sem', 'edx', 'xrd']):
             experiment = {
                 'sample_id': full_sample_id,
                 'transmittance': request.form.get('transmittance'),
                 'reflectance': request.form.get('reflectance'),
                 'absorbance': request.form.get('absorbance'),
+                'pl': request.form.get('pl'),
                 'plqy': request.form.get('plqy'),
                 'sem': request.form.get('sem'),
                 'edx': request.form.get('edx'),
@@ -568,11 +587,13 @@ def add_experiment(sample_id):
                 print(f"Error processing data: {str(e)}")
                 return None
 
+        pl_from_file = process_data(request.files.get('pl_file'))
         experiment = {
             'sample_id': sample_id,
             'transmittance': process_data(request.files.get('transmittance_file')),
             'reflectance': process_data(request.files.get('reflectance_file')),
             'absorbance': process_data(request.files.get('absorbance_file')),
+            'pl': pl_from_file or (request.form.get('pl') or None),
             'plqy': process_data(request.files.get('plqy_file')),
             'sem': request.form.get('sem'),
             'edx': request.form.get('edx'),
@@ -603,13 +624,14 @@ def edit_experiment(id):
     
     if request.method == 'POST':
         update_data = {
-            'transmittance': request.form['transmittance'],
-            'reflectance': request.form['reflectance'],
-            'absorbance': request.form['absorbance'],
-            'plqy': request.form['plqy'],
-            'sem': request.form['sem'],
-            'edx': request.form['edx'],
-            'xrd': request.form['xrd']
+            'transmittance': request.form.get('transmittance', ''),
+            'reflectance': request.form.get('reflectance', ''),
+            'absorbance': request.form.get('absorbance', ''),
+            'pl': request.form.get('pl', ''),
+            'plqy': request.form.get('plqy', ''),
+            'sem': request.form.get('sem', ''),
+            'edx': request.form.get('edx', ''),
+            'xrd': request.form.get('xrd', ''),
         }
         experiments.update_one({'sample_id': id}, {'$set': update_data})
         flash('Experiment updated successfully!', 'success')
@@ -871,7 +893,7 @@ def forgot_password():
             message = SendGridMail(
                 from_email=Email(email_from),
                 to_emails=To(to_address),
-                subject='Password Reset Request - Project Tracker',
+                subject='Password Reset Request - Experimental Sample Tracker',
                 html_content=Content(
                     'text/html',
                     f'''
@@ -1007,6 +1029,7 @@ def plots():
         'transmittance': [],
         'reflectance': [],
         'absorbance': [],
+        'pl': [],
         'plqy': [],
         'sem': [],
         'edx': [],
@@ -1194,6 +1217,8 @@ CHATBOT_COLUMN_ALIASES = {
     'transmittance': 'transmittance',
     'reflectance': 'reflectance',
     'absorbance': 'absorbance',
+    'pl': 'pl',
+    'photoluminescence': 'pl',
     'plqy': 'plqy',
     'sem': 'sem',
     'edx': 'edx',
@@ -1355,6 +1380,38 @@ def chatbot_new():
 def chatbot_llm():
     return redirect(url_for('chatbot_new'))
 
+
+@app.route('/help')
+def user_help():
+    """Public user guide (PDF hosted on S3). Override URL with HELP_PDF_URL in .env."""
+    return render_template(
+        'help.html',
+        help_pdf_url=app.config.get('HELP_PDF_URL') or '',
+    )
+
+
+_EXAMPLE_PL_CSV = Path(__file__).resolve().parent / 'Example_PL.csv'
+
+
+@app.route('/pl_plots')
+@login_required
+def pl_plots():
+    return render_template('pl_plots.html')
+
+
+@app.route('/pl_plots/example.csv')
+@login_required
+def pl_plots_example_csv():
+    if not _EXAMPLE_PL_CSV.is_file():
+        abort(404)
+    return send_file(
+        _EXAMPLE_PL_CSV,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name='Example_PL.csv',
+    )
+
+
 def _pre_post_entry_label(doc):
     if not doc:
         return 'Unnamed'
@@ -1453,7 +1510,8 @@ def _spectra_from_wavelength_tra_map(d):
     if not isinstance(d, dict):
         return None
     skip = frozenset({
-        'transmittance', 'reflectance', 'absorbance', 'design_name', 'name', 'title',
+        'transmittance', 'reflectance', 'absorbance', 'pl', 'plqy', 'sem', 'edx', 'xrd',
+        'design_name', 'name', 'title',
         '_id', 'filename', 'file_name', 'data', 'created_at', 'updated_at', 'id',
     })
     points = []

@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}PL Plots · Experimental Sample Tracker{% endblock %}
+
+{% block content %}
+<div class="pl-plots-page">
+    <h1 class="pl-plots-title">PL spectra plotter</h1>
+    <p class="pl-plots-lead">
+        Upload one or more <strong>.csv</strong> files (two columns per line: wavelength (nm), intensity).
+        Files are plotted together in the browser; nothing is stored on the server.
+    </p>
+
+    <div class="pl-plots-card card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="form-row align-items-end">
+                <div class="form-group col-md-8 mb-md-0">
+                    <label for="plFiles"><strong>Select CSV files</strong> (multiple allowed)</label>
+                    <input type="file" id="plFiles" class="form-control-file" accept=".csv,text/csv" multiple>
+                    <small class="form-text text-muted">Same format as the project example (comma-separated values, no header required).</small>
+                </div>
+                <div class="form-group col-md-4 text-md-right mb-0">
+                    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('pl_plots_example_csv') }}">
+                        <i class="fas fa-download"></i> Download example CSV
+                    </a>
+                </div>
+            </div>
+            <div class="mt-3">
+                <button type="button" id="btnPlot" class="btn btn-danger" disabled>Plot selected files</button>
+                <button type="button" id="btnClear" class="btn btn-outline-secondary">Clear</button>
+                <button type="button" id="btnDownloadPlot" class="btn btn-outline-primary" style="display:none;">
+                    <i class="fas fa-image"></i> Download plot (PNG)
+                </button>
+            </div>
+            <div id="plStatus" class="alert alert-info mt-3 mb-0" style="display:none;" role="status"></div>
+        </div>
+    </div>
+
+    <div id="plPlot" class="pl-plot-area"></div>
+</div>
+
+<style>
+.pl-plots-page { max-width: 1200px; margin: 0 auto; }
+.pl-plots-title { color: #ff1825; font-size: 1.75rem; font-weight: 700; margin-bottom: 0.35rem; }
+.pl-plots-lead { color: #555; margin-bottom: 1.25rem; max-width: 52rem; }
+.pl-plots-card .btn-danger { background-color: #ff1825; border-color: #ff1825; }
+.pl-plots-card .btn-danger:hover:not(:disabled) { background-color: #e61520; border-color: #e61520; }
+.pl-plots-card .btn-outline-primary { color: #2563eb; border-color: #2563eb; }
+.pl-plots-card .btn-outline-primary:hover { color: #fff; background-color: #2563eb; border-color: #2563eb; }
+.pl-plot-area {
+    min-height: 520px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    background: #fafafa;
+}
+</style>
+
+<script>
+(function() {
+    const fileInput = document.getElementById('plFiles');
+    const btnPlot = document.getElementById('btnPlot');
+    const btnClear = document.getElementById('btnClear');
+    const btnDownloadPlot = document.getElementById('btnDownloadPlot');
+    const statusEl = document.getElementById('plStatus');
+    const plotDiv = document.getElementById('plPlot');
+
+    function setDownloadPlotVisible(show) {
+        btnDownloadPlot.style.display = show ? 'inline-block' : 'none';
+    }
+
+    const palette = [
+        '#ff1825', '#2563eb', '#059669', '#d97706', '#7c3aed',
+        '#db2777', '#0891b2', '#4d7c0f', '#b45309', '#1e293b'
+    ];
+
+    function showStatus(msg, isError) {
+        statusEl.style.display = msg ? 'block' : 'none';
+        statusEl.className = 'alert mt-3 mb-0 ' + (isError ? 'alert-danger' : 'alert-info');
+        statusEl.textContent = msg || '';
+    }
+
+    function parsePlCsv(text, label) {
+        const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+        const xs = [];
+        const ys = [];
+        let skippedHeader = false;
+
+        for (let i = 0; i < lines.length; i++) {
+            const raw = lines[i].trim();
+            if (!raw || raw.startsWith('#')) continue;
+            const parts = raw.split(',');
+            if (parts.length < 2) continue;
+            const a = parseFloat(parts[0].trim());
+            const b = parseFloat(parts[1].trim());
+            if (!Number.isFinite(a) || !Number.isFinite(b)) {
+                if (!skippedHeader && xs.length === 0) {
+                    skippedHeader = true;
+                    continue;
+                }
+                continue;
+            }
+            xs.push(a);
+            ys.push(b);
+        }
+
+        if (xs.length < 2) {
+            throw new Error('Not enough numeric rows in ' + label + ' (need at least 2 data points).');
+        }
+        return { x: xs, y: ys, name: label };
+    }
+
+    function readFileAsText(file) {
+        return new Promise(function(resolve, reject) {
+            const r = new FileReader();
+            r.onload = function() { resolve(r.result); };
+            r.onerror = function() { reject(new Error('Could not read ' + file.name)); };
+            r.readAsText(file);
+        });
+    }
+
+    fileInput.addEventListener('change', function() {
+        btnPlot.disabled = !fileInput.files || fileInput.files.length === 0;
+        showStatus('', false);
+        setDownloadPlotVisible(false);
+    });
+
+    btnPlot.addEventListener('click', async function() {
+        const files = fileInput.files;
+        if (!files || !files.length) return;
+
+        btnPlot.disabled = true;
+        showStatus('Loading files…', false);
+
+        const traces = [];
+        const errors = [];
+
+        for (let i = 0; i < files.length; i++) {
+            const f = files[i];
+            const name = f.name || ('file_' + (i + 1));
+            if (!name.toLowerCase().endsWith('.csv')) {
+                errors.push(name + ': please use a .csv file.');
+                continue;
+            }
+            try {
+                const text = await readFileAsText(f);
+                const series = parsePlCsv(text, name);
+                traces.push({
+                    x: series.x,
+                    y: series.y,
+                    mode: 'lines',
+                    name: series.name,
+                    line: { width: 2, color: palette[i % palette.length] }
+                });
+            } catch (e) {
+                errors.push(name + ': ' + e.message);
+            }
+        }
+
+        if (!traces.length) {
+            showStatus(errors.join(' ') || 'No valid series to plot.', true);
+            btnPlot.disabled = false;
+            Plotly.purge(plotDiv);
+            plotDiv.innerHTML = '';
+            setDownloadPlotVisible(false);
+            return;
+        }
+
+        const layout = {
+            title: { text: 'PL spectra (overlay)', font: { size: 18 } },
+            xaxis: { title: 'Wavelength (nm)', zeroline: true },
+            yaxis: { title: 'Intensity (a.u.)', zeroline: true },
+            legend: { orientation: 'h', y: -0.2 },
+            margin: { t: 60, r: 40, b: 100, l: 70 },
+            paper_bgcolor: '#fafafa',
+            plot_bgcolor: '#ffffff',
+            hovermode: 'closest'
+        };
+
+        const config = {
+            responsive: true,
+            displayModeBar: true,
+            displaylogo: false,
+            scrollZoom: true,
+            toImageButtonOptions: {
+                format: 'png',
+                filename: 'pl_spectra_plot',
+                height: 800,
+                width: 1200,
+                scale: 2
+            }
+        };
+
+        await Plotly.newPlot(plotDiv, traces, layout, config);
+
+        let msg = 'Plotted ' + traces.length + ' file(s).';
+        if (errors.length) msg += ' Warnings: ' + errors.join(' ');
+        showStatus(msg, errors.length > 0);
+        btnPlot.disabled = false;
+        setDownloadPlotVisible(true);
+    });
+
+    btnDownloadPlot.addEventListener('click', function() {
+        const el = document.getElementById('plPlot');
+        if (!el || !el.data || !el.data.length) {
+            showStatus('Create a plot first, then download.', true);
+            return;
+        }
+        Plotly.downloadImage('plPlot', {
+            format: 'png',
+            width: 1200,
+            height: 800,
+            filename: 'pl_spectra_plot',
+            scale: 2
+        }).catch(function() {
+            showStatus('Download failed. Try the camera icon on the chart toolbar.', true);
+        });
+    });
+
+    btnClear.addEventListener('click', function() {
+        fileInput.value = '';
+        btnPlot.disabled = true;
+        showStatus('', false);
+        setDownloadPlotVisible(false);
+        Plotly.purge(plotDiv);
+        plotDiv.innerHTML = '';
+    });
+})();
+</script>
+{% endblock %}

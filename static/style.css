@@ -732,7 +732,7 @@ table {
     border-collapse: collapse;
 }
 
-/* Column widths for Project Tracker table */
+/* Column widths for Experimental Sample Tracker table */
 #sampleTable th:nth-child(1) { min-width: 100px; } /* ID */
 #sampleTable th:nth-child(2) { min-width: 110px; } /* Date */
 #sampleTable th:nth-child(3) { min-width: 100px; } /* Time */

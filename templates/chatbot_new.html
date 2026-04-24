@@ -2,13 +2,13 @@
 
 {% block title %}Chatbot New{% endblock %}
 
-{% block header %}Project Tracker Advanced Chatbot{% endblock %}
+{% block header %}Experimental Sample Tracker Advanced Chatbot{% endblock %}
 
 {% block content %}
 <div class="chatbot-container">
     <div class="chat-interface">
         <div class="chat-header">
-            <h2>Advanced Project Assistant</h2>
+            <h2>Advanced Sample Assistant</h2>
             <div class="chat-info">
                 <i class="fas fa-info-circle"></i>
                 <span>Ask questions in natural language about your samples and experiments</span>
@@ -116,6 +116,7 @@
                                 <th>Transmittance</th>
                                 <th>Reflectance</th>
                                 <th>Absorbance</th>
+                                <th>PL</th>
                                 <th>PLQY</th>
                                 <th>SEM</th>
                                 <th>EDX</th>
@@ -171,6 +172,10 @@
                                             {% if experiment.absorbance %}
                                                 <a href="{{ experiment.absorbance }}" target="_blank" class="view-link">View</a>
                                             {% endif %}
+                                        {% elif column == 'pl' and experiment %}
+                                            {% if experiment.pl %}
+                                                <a href="{{ experiment.pl }}" target="_blank" class="view-link">View</a>
+                                            {% endif %}
                                         {% elif column == 'plqy' and experiment %}
                                             {% if experiment.plqy %}
                                                 <a href="{{ experiment.plqy }}" target="_blank" class="view-link">View</a>
@@ -222,6 +227,11 @@
                                 <td class="center">
                                     {% if experiment and experiment.absorbance %}
                                         <a href="{{ experiment.absorbance }}" target="_blank" class="view-link">View</a>
+                                    {% endif %}
+                                </td>
+                                <td class="center">
+                                    {% if experiment and experiment.pl %}
+                                        <a href="{{ experiment.pl }}" target="_blank" class="view-link">View</a>
                                     {% endif %}
                                 </td>
                                 <td class="center">

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Project Tracker{% endblock %}</title>
+    <title>{% block title %}Experimental Sample Tracker{% endblock %}</title>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
@@ -17,7 +17,7 @@
                 <img src="{{ url_for('static', filename='awi_logo.jpg') }}" alt="Logo" style="height:36px; margin-right:8px;">
             </a>
             <span style="font-weight:700; font-size:1.5rem; letter-spacing:1px;">
-                <a href="{{ url_for('index') }}" style="color:#ff1825; text-decoration:none;">Project Tracker</a>
+                <a href="{{ url_for('index') }}" style="color:#ff1825; text-decoration:none;">Experimental Sample Tracker</a>
             </span>
         </a>
         <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -31,6 +31,9 @@
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="{{ url_for('chatbot_llm') }}">Chatbot</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('user_help') }}"><i class="fas fa-question-circle"></i> Help</a>
                 </li>
                 <!-- Removed other tabs for brevity -->
                 {% endif %}
@@ -52,7 +55,7 @@
         </div>
     </nav>
 
-    <div class="container mt-4{% if request.endpoint in ['login', 'forgot_password', 'reset_password'] %} login-container-bg{% endif %}">
+    <div class="container mt-4{% if request.endpoint in ['login', 'forgot_password', 'reset_password', 'help'] %} login-container-bg{% endif %}">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}

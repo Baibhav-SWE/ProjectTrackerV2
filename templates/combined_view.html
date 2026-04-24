@@ -64,21 +64,26 @@
             <option value="no">No Data</option>
         </select>
         <select data-column="17">
-            <option value="">All PLQY</option>
+            <option value="">All PL</option>
             <option value="has">Has Data</option>
             <option value="no">No Data</option>
         </select>
         <select data-column="18">
-            <option value="">All SEM</option>
+            <option value="">All PLQY</option>
             <option value="has">Has Data</option>
             <option value="no">No Data</option>
         </select>
         <select data-column="19">
-            <option value="">All EDX</option>
+            <option value="">All SEM</option>
             <option value="has">Has Data</option>
             <option value="no">No Data</option>
         </select>
         <select data-column="20">
+            <option value="">All EDX</option>
+            <option value="has">Has Data</option>
+            <option value="no">No Data</option>
+        </select>
+        <select data-column="21">
             <option value="">All XRD</option>
             <option value="has">Has Data</option>
             <option value="no">No Data</option>
@@ -115,6 +120,7 @@
                 <th>Transmittance</th>
                 <th>Reflectance</th>
                 <th>Absorbance</th>
+                <th>PL</th>
                 <th>PLQY</th>
                 <th>SEM</th>
                 <th>EDX</th>
@@ -155,6 +161,11 @@
                 <td class="center">
                     {% if experiment and experiment.absorbance %}
                         <a href="#" onclick="showData('absorbance', {{ experiment.absorbance|tojson }})">View</a>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if experiment and experiment.pl %}
+                        <a href="#" onclick="showData('pl', {{ experiment.pl|tojson }})">View</a>
                     {% endif %}
                 </td>
                 <td class="center">
@@ -305,7 +316,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 if (filterValue) {
                     if (filter.tagName === 'SELECT') {
-                        if (columnIndex >= 14) { // Data columns
+                        if (columnIndex >= 14) { // Experiment data columns (Transmittance … XRD)
                             const hasData = cell.querySelector('a') !== null;
                             if ((filterValue === 'has' && !hasData) || 
                                 (filterValue === 'no' && hasData)) {

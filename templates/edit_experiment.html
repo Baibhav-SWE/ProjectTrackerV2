@@ -31,6 +31,10 @@
                 <input type="text" id="absorbance" name="absorbance" value="{{ experiment.absorbance }}">
             </div>
             <div class="form-group">
+                <label for="pl">PL Data:</label>
+                <input type="text" id="pl" name="pl" value="{{ experiment.get('pl', '') }}">
+            </div>
+            <div class="form-group">
                 <label for="plqy">PLQY Data:</label>
                 <input type="text" id="plqy" name="plqy" value="{{ experiment.plqy }}">
             </div>

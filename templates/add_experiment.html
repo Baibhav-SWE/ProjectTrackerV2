@@ -68,6 +68,27 @@
                 </div>
             </div>
 
+            <!-- PL -->
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>PL Data</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label>Upload CSV File:</label>
+                            <input type="file" class="form-control-file" name="pl_file" accept=".csv">
+                            <small class="form-text text-muted">CSV format: wavelength,intensity (e.g., "500,1200")</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Or Enter Data Manually:</label>
+                            <textarea class="form-control" name="pl" rows="3"
+                                    placeholder="Enter data in CSV format or JSON"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- PLQY -->
             <div class="col-md-6 mb-3">
                 <div class="card">
