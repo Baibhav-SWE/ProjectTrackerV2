@@ -14,7 +14,7 @@ import numpy as np
 import re
 from urllib.parse import urlparse
 from pathlib import Path
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure
 from pymongo.uri_parser import parse_uri
@@ -50,10 +50,11 @@ if os.getenv('SERVER_NAME'):
 if os.getenv('PREFERRED_URL_SCHEME'):
     app.config['PREFERRED_URL_SCHEME'] = os.getenv('PREFERRED_URL_SCHEME').strip()
 
-_DEFAULT_HELP_PDF_URL = (
-    'https://awi-experiential-sample-tracker.s3.us-east-2.amazonaws.com/Sample+Tracker+User+Help.pdf'
-)
-app.config['HELP_PDF_URL'] = (os.getenv('HELP_PDF_URL') or _DEFAULT_HELP_PDF_URL).strip()
+# Prefer HELP_PDF_URL from `.env` beside this file (so it wins over a stale empty shell variable).
+_help_pdf_raw = (dotenv_values(_load_dotenv_path).get('HELP_PDF_URL') or os.getenv('HELP_PDF_URL') or '').strip()
+if (len(_help_pdf_raw) >= 2) and (_help_pdf_raw[0] == _help_pdf_raw[-1]) and _help_pdf_raw[0] in '"\'':
+    _help_pdf_raw = _help_pdf_raw[1:-1].strip()
+app.config['HELP_PDF_URL'] = _help_pdf_raw
 
 # MongoDB connection
 MONGODB_URI = (os.getenv('MONGODB_URI') or '').strip()
@@ -1382,7 +1383,7 @@ def chatbot_llm():
 
 @app.route('/help')
 def user_help():
-    """Public user guide (PDF hosted on S3). Override URL with HELP_PDF_URL in .env."""
+    """Public user guide PDF. Set HELP_PDF_URL in .env (or environment)."""
     return render_template(
         'help.html',
         help_pdf_url=app.config.get('HELP_PDF_URL') or '',
