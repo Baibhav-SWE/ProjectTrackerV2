@@ -51,8 +51,7 @@ if os.getenv('PREFERRED_URL_SCHEME'):
     app.config['PREFERRED_URL_SCHEME'] = os.getenv('PREFERRED_URL_SCHEME').strip()
 
 _DEFAULT_HELP_PDF_URL = (
-    'https://awi-experiential-sample-tracker.s3.us-east-2.amazonaws.com/'
-    'Project+Tracker+User+Help.pdf'
+    'https://awi-experiential-sample-tracker.s3.us-east-2.amazonaws.com/Sample+Tracker+User+Help.pdf'
 )
 app.config['HELP_PDF_URL'] = (os.getenv('HELP_PDF_URL') or _DEFAULT_HELP_PDF_URL).strip()
 
